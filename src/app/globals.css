@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-mata-bg text-mata-text font-display antialiased;
+  }
+}
+
+@layer components {
+  .card-glow {
+    box-shadow: 0 0 0 1px rgba(255, 107, 43, 0.1),
+                0 4px 16px rgba(255, 107, 43, 0.06);
+  }
+
+  .card-glow-active {
+    box-shadow: 0 0 0 2px rgba(255, 107, 43, 0.3),
+                0 8px 32px rgba(255, 107, 43, 0.12);
+  }
+
+  .gradient-text {
+    background: linear-gradient(135deg, #ff6b2b 0%, #ff8f5e 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .pulse-dot {
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.2); }
+  }
+
+  .drag-over {
+    @apply ring-2 ring-mata-orange ring-offset-2 ring-offset-mata-bg;
+  }
+}
