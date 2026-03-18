@@ -1,128 +1,152 @@
 'use client';
 
+import { useMemo } from 'react';
 import AgentAvatar from '@/components/ui/AgentAvatar';
-import type { AgentName } from '@/types';
+import type { OpportunityScore, BasketPosition, BasketAnalytics, AgentName } from '@/types';
+import type { PositionSignal } from '@/lib/scoring/actions';
+import { generateLocalBrief, type LocalBrief, type BriefSection } from '@/lib/briefs/local';
 
 interface DailyBriefProps {
-  brief: {
-    content: string;
-    agent_name: string;
-    created_at: string;
-  } | null;
-  onRefresh: () => void;
-  loading?: boolean;
+  positions: BasketPosition[];
+  analytics: BasketAnalytics | null;
+  opportunities: OpportunityScore[];
+  signals: PositionSignal[];
+  /** Claude-generated brief from API — shown as upgrade when available */
+  claudeBrief?: { content: string; agent_name: string; created_at: string } | null;
+  onRefreshClaude?: () => void;
+  claudeLoading?: boolean;
 }
 
-function formatTimestamp(iso: string): string {
-  const date = new Date(iso);
-  return date.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
+// Agent color mapping for section borders
+const agentBorderColor: Record<string, string> = {
+  Mark: 'border-l-orange-400',
+  Paul: 'border-l-blue-400',
+  Nia: 'border-l-violet-400',
+  Rex: 'border-l-red-400',
+};
+
+const agentBg: Record<string, string> = {
+  Mark: 'bg-orange-50/50',
+  Paul: 'bg-blue-50/50',
+  Nia: 'bg-violet-50/50',
+  Rex: 'bg-red-50/50',
+};
+
+function formatMarkdown(text: string): React.ReactNode {
+  // Bold **text** and emoji preservation
+  return text.split(/(\*\*[^*]+\*\*)/).map((segment, i) => {
+    if (segment.startsWith('**') && segment.endsWith('**')) {
+      return (
+        <strong key={i} className="font-bold text-mata-text">
+          {segment.slice(2, -2)}
+        </strong>
+      );
+    }
+    return <span key={i}>{segment}</span>;
   });
 }
 
-function BriefSkeleton() {
+function BriefSectionCard({ section, index }: { section: BriefSection; index: number }) {
+  const borderColor = agentBorderColor[section.agent] ?? 'border-l-gray-400';
+  const bg = agentBg[section.agent] ?? 'bg-gray-50/50';
+
   return (
-    <div className="animate-pulse space-y-3 p-5">
-      <div className="h-4 w-2/3 rounded bg-mata-surface" />
-      <div className="h-4 w-full rounded bg-mata-surface" />
-      <div className="h-4 w-5/6 rounded bg-mata-surface" />
-      <div className="h-4 w-3/4 rounded bg-mata-surface" />
-      <div className="h-4 w-1/2 rounded bg-mata-surface" />
+    <div
+      className={`rounded-xl border border-mata-border ${bg} border-l-[3px] ${borderColor} overflow-hidden animate-[slideInUp_0.3s_ease-out_both]`}
+      style={{ animationDelay: `${index * 100}ms` }}
+    >
+      {/* Section header */}
+      <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5">
+        <AgentAvatar agentName={section.agent as AgentName} size="xs" />
+        <div>
+          <span className="text-[10px] font-black text-mata-text">{section.agent}</span>
+          <span className="text-[9px] text-mata-text-muted ml-1.5">{section.title}</span>
+        </div>
+      </div>
+
+      {/* Lines */}
+      <div className="px-3 pb-3 space-y-1.5">
+        {section.lines.map((line, i) => (
+          <p key={i} className="text-[11px] text-mata-text-secondary leading-snug">
+            {formatMarkdown(line)}
+          </p>
+        ))}
+      </div>
     </div>
   );
 }
 
-function formatBriefContent(content: string): React.ReactNode {
-  // Split on double newlines for paragraphs, single newlines for line breaks
-  const paragraphs = content.split(/\n\n+/);
+export default function DailyBrief({
+  positions,
+  analytics,
+  opportunities,
+  signals,
+  claudeBrief,
+  onRefreshClaude,
+  claudeLoading,
+}: DailyBriefProps) {
+  // Always generate a local brief from current data
+  const localBrief: LocalBrief = useMemo(
+    () => generateLocalBrief(positions, analytics, opportunities, signals),
+    [positions, analytics, opportunities, signals]
+  );
 
-  return paragraphs.map((paragraph, i) => {
-    const lines = paragraph.split('\n');
-    return (
-      <p key={i} className="text-sm leading-relaxed text-mata-text-secondary">
-        {lines.map((line, j) => (
-          <span key={j}>
-            {j > 0 && <br />}
-            {/* Bold text between ** markers */}
-            {line.split(/(\*\*[^*]+\*\*)/).map((segment, k) => {
-              if (segment.startsWith('**') && segment.endsWith('**')) {
-                return (
-                  <strong key={k} className="font-bold text-mata-text">
-                    {segment.slice(2, -2)}
-                  </strong>
-                );
-              }
-              return <span key={k}>{segment}</span>;
-            })}
-          </span>
-        ))}
-      </p>
-    );
-  });
-}
-
-export default function DailyBrief({ brief, onRefresh, loading }: DailyBriefProps) {
   return (
     <div className="rounded-2xl border border-mata-border bg-mata-card overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-mata-border px-5 py-4">
-        <div className="flex items-center gap-3">
-          <AgentAvatar
-            agentName={(brief?.agent_name as AgentName) ?? 'Paul'}
-            size="md"
-          />
+      <div className="flex items-center justify-between border-b border-mata-border px-4 py-3">
+        <div className="flex items-center gap-2">
+          <AgentAvatar agentName="Paul" size="sm" />
           <div>
-            <h2 className="text-lg font-black text-mata-text tracking-tight">
-              Daily Brief
-            </h2>
-            {brief && (
-              <p className="text-[11px] text-mata-text-muted">
-                {formatTimestamp(brief.created_at)}
-              </p>
-            )}
+            <h2 className="text-sm font-black text-mata-text tracking-tight">Daily Brief</h2>
+            <p className="text-[9px] text-mata-text-muted">{localBrief.summary}</p>
           </div>
         </div>
 
-        <button
-          onClick={onRefresh}
-          disabled={loading}
-          className="flex items-center gap-1.5 rounded-lg bg-mata-surface px-3 py-1.5 text-xs font-semibold text-mata-text-secondary transition-all hover:bg-mata-border hover:text-mata-text disabled:opacity-50"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={loading ? 'animate-spin' : ''}
+        {onRefreshClaude && (
+          <button
+            onClick={onRefreshClaude}
+            disabled={claudeLoading}
+            className="flex items-center gap-1 rounded-lg bg-mata-surface px-2.5 py-1 text-[9px] font-semibold text-mata-text-secondary hover:bg-mata-border transition-all disabled:opacity-50"
+            title="Generate AI-enhanced brief"
           >
-            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
-          </svg>
-          Refresh
-        </button>
+            <svg
+              width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+              className={claudeLoading ? 'animate-spin' : ''}
+            >
+              <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
+            </svg>
+            AI Brief
+          </button>
+        )}
       </div>
 
-      {/* Content */}
-      {loading ? (
-        <BriefSkeleton />
-      ) : brief ? (
-        <div className="space-y-3 px-5 py-4">
-          {formatBriefContent(brief.content)}
-        </div>
-      ) : (
-        <div className="flex flex-col items-center py-12 px-6 text-center">
-          <span className="text-2xl mb-2">📋</span>
-          <p className="text-sm text-mata-text-muted">
-            No brief available yet. Click refresh to generate one.
-          </p>
+      {/* Agent sections */}
+      <div className="p-3 space-y-2">
+        {localBrief.sections.map((section, i) => (
+          <BriefSectionCard key={section.agent} section={section} index={i} />
+        ))}
+      </div>
+
+      {/* Claude AI brief (if available) — shown below as enhanced version */}
+      {claudeBrief && (
+        <div className="border-t border-mata-border px-4 py-3">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="h-1.5 w-1.5 rounded-full bg-mata-orange pulse-dot" />
+            <span className="text-[9px] font-black text-mata-orange uppercase tracking-wider">AI-Enhanced Brief</span>
+            <span className="text-[8px] text-mata-text-muted">
+              {new Date(claudeBrief.created_at).toLocaleString('en-US', {
+                month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
+              })}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {claudeBrief.content.split(/\n\n+/).map((paragraph, i) => (
+              <p key={i} className="text-[11px] text-mata-text-secondary leading-relaxed">
+                {formatMarkdown(paragraph)}
+              </p>
+            ))}
+          </div>
         </div>
       )}
     </div>

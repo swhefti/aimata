@@ -321,7 +321,15 @@ export default function DashboardPage() {
             <BasketNarrative positions={positions} analytics={analytics} />
           </div>
           <div className="mt-3">
-            <DailyBrief brief={brief} onRefresh={fetchBrief} loading={loadingBrief} />
+            <DailyBrief
+              positions={positions}
+              analytics={analytics}
+              opportunities={opportunities}
+              signals={signals}
+              claudeBrief={brief}
+              onRefreshClaude={fetchBrief}
+              claudeLoading={loadingBrief}
+            />
           </div>
         </div>
 
