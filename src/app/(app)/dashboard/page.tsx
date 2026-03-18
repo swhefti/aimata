@@ -17,6 +17,9 @@ import Sparkline from '@/components/ui/Sparkline';
 import BasketPanel from '@/components/basket/BasketPanel';
 import AnalyticsPanel from '@/components/basket/AnalyticsPanel';
 import DailyBrief from '@/components/dashboard/DailyBrief';
+import AgentStrip from '@/components/dashboard/AgentStrip';
+import BasketNarrative from '@/components/basket/BasketNarrative';
+import { computePositionActions, type PositionSignal } from '@/lib/scoring/actions';
 
 type OpportunityWithPrice = OpportunityScore & {
   last_price?: number;
@@ -145,6 +148,7 @@ export default function DashboardPage() {
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [dragSource, setDragSource] = useState<'feed' | 'basket' | null>(null);
   const [flippedTicker, setFlippedTicker] = useState<string | null>(null);
+  const [signals, setSignals] = useState<PositionSignal[]>([]);
 
   const [pendingAdd, setPendingAdd] = useState<{
     ticker: string; assetName: string; price: number; opportunityData: OpportunityWithPrice;
@@ -191,6 +195,11 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchOpportunities(); fetchBasket(); fetchAnalytics(); fetchBrief();
   }, [fetchOpportunities, fetchBasket, fetchAnalytics, fetchBrief]);
+
+  // Compute Rex's signals whenever positions change
+  useEffect(() => {
+    setSignals(computePositionActions(positions));
+  }, [positions]);
 
   // ─── Actions ───
   const showQuantityModal = useCallback((ticker: string) => {
@@ -272,6 +281,9 @@ export default function DashboardPage() {
         </button>
       </div>
 
+      {/* Agent commentary strip */}
+      <AgentStrip opportunities={opportunities} positions={positions} analytics={analytics} signals={signals} />
+
       {/* 3 equal columns */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* LEFT: Scanner */}
@@ -283,9 +295,13 @@ export default function DashboardPage() {
 
         {/* CENTER: Basket */}
         <div>
-          <DroppableBasketArea positions={positions} onRemove={handleRemoveFromBasket} onWeightChange={handleWeightChange} loadingBasket={loadingBasket} isDraggingFromFeed={dragSource === 'feed'} />
+          <DroppableBasketArea positions={positions} onRemove={handleRemoveFromBasket} onWeightChange={handleWeightChange} loadingBasket={loadingBasket} isDraggingFromFeed={dragSource === 'feed'} signals={signals} />
           {dragSource === 'basket' && <RemoveDropZone />}
-          <div className="mt-4">
+          {/* Paul's narrative review */}
+          <div className="mt-3">
+            <BasketNarrative positions={positions} analytics={analytics} />
+          </div>
+          <div className="mt-3">
             <DailyBrief brief={brief} onRefresh={fetchBrief} loading={loadingBrief} />
           </div>
         </div>
@@ -667,9 +683,9 @@ function FlippableCard({
 
 // ─── Droppable Basket Area ───
 function DroppableBasketArea({
-  positions, onRemove, onWeightChange, loadingBasket, isDraggingFromFeed,
+  positions, onRemove, onWeightChange, loadingBasket, isDraggingFromFeed, signals,
 }: {
-  positions: BasketPosition[]; onRemove: (t: string) => void; onWeightChange: (t: string, w: number) => void; loadingBasket: boolean; isDraggingFromFeed: boolean;
+  positions: BasketPosition[]; onRemove: (t: string) => void; onWeightChange: (t: string, w: number) => void; loadingBasket: boolean; isDraggingFromFeed: boolean; signals: PositionSignal[];
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: 'basket-drop' });
   return (
@@ -683,7 +699,7 @@ function DroppableBasketArea({
           </div>
         </div>
       ) : (
-        <BasketPanel positions={positions} onRemove={onRemove} onWeightChange={onWeightChange} isOver={isOver && isDraggingFromFeed} />
+        <BasketPanel positions={positions} onRemove={onRemove} onWeightChange={onWeightChange} isOver={isOver && isDraggingFromFeed} signals={signals} />
       )}
     </div>
   );

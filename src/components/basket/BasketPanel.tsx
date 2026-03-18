@@ -4,6 +4,7 @@ import { useState } from 'react';
 import AgentAvatar from '@/components/ui/AgentAvatar';
 import Sparkline from '@/components/ui/Sparkline';
 import type { BasketPosition } from '@/types';
+import { type PositionSignal, getActionStyle } from '@/lib/scoring/actions';
 
 interface BasketPanelProps {
   positions: BasketPosition[];
@@ -11,6 +12,7 @@ interface BasketPanelProps {
   onWeightChange: (ticker: string, weight: number) => void;
   isOver?: boolean;
   priceHistories?: Record<string, number[]>;
+  signals?: PositionSignal[];
 }
 
 export default function BasketPanel({
@@ -19,6 +21,7 @@ export default function BasketPanel({
   onWeightChange,
   isOver,
   priceHistories,
+  signals,
 }: BasketPanelProps) {
   const totalWeight = positions.reduce(
     (sum, p) => sum + (p.manual_weight ?? p.target_weight),
@@ -79,15 +82,19 @@ export default function BasketPanel({
           </div>
         ) : (
           <div className="space-y-1">
-            {positions.map((pos) => (
-              <BasketPositionRow
-                key={pos.ticker}
-                position={pos}
-                onRemove={onRemove}
-                onWeightChange={onWeightChange}
-                sparkData={priceHistories?.[pos.ticker]}
-              />
-            ))}
+            {positions.map((pos) => {
+              const signal = signals?.find(s => s.ticker === pos.ticker);
+              return (
+                <BasketPositionRow
+                  key={pos.ticker}
+                  position={pos}
+                  onRemove={onRemove}
+                  onWeightChange={onWeightChange}
+                  sparkData={priceHistories?.[pos.ticker]}
+                  signal={signal}
+                />
+              );
+            })}
 
             {/* Drop zone hint when dragging */}
             {isOver && (
@@ -127,11 +134,13 @@ function BasketPositionRow({
   onRemove,
   onWeightChange,
   sparkData,
+  signal,
 }: {
   position: BasketPosition;
   onRemove: (ticker: string) => void;
   onWeightChange: (ticker: string, weight: number) => void;
   sparkData?: number[];
+  signal?: PositionSignal;
 }) {
   const [editing, setEditing] = useState(false);
   const [weightVal, setWeightVal] = useState(
@@ -186,6 +195,19 @@ function BasketPositionRow({
           </button>
         )}
       </div>
+
+      {/* Rex's action signal */}
+      {signal && (() => {
+        const actionStyle = getActionStyle(signal.action);
+        return (
+          <div
+            className={`flex-shrink-0 rounded-md px-1.5 py-0.5 text-[8px] font-black ${actionStyle.bg} ${actionStyle.color}`}
+            title={signal.reason}
+          >
+            {actionStyle.icon} {signal.action}
+          </div>
+        );
+      })()}
 
       {/* Price + P&L */}
       <div className="flex-1 text-right min-w-0">
