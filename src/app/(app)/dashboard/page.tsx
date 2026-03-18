@@ -149,6 +149,7 @@ export default function DashboardPage() {
   const [pendingAdd, setPendingAdd] = useState<{
     ticker: string; assetName: string; price: number; opportunityData: OpportunityWithPrice;
   } | null>(null);
+  const scannerColRef = useRef<HTMLDivElement>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -274,9 +275,9 @@ export default function DashboardPage() {
       {/* 3 equal columns */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* LEFT: Scanner */}
-        <div>
+        <div ref={scannerColRef}>
           {loadingFeed ? <FeedSkeleton /> : (
-            <ScannerFeed opportunities={opportunities} onAdd={showQuantityModal} flippedTicker={flippedTicker} onFlip={setFlippedTicker} />
+            <ScannerFeed opportunities={opportunities} onAdd={showQuantityModal} flippedTicker={flippedTicker} onFlip={setFlippedTicker} columnRef={scannerColRef} />
           )}
         </div>
 
@@ -326,12 +327,13 @@ const INCREMENT = 6;
 const MAX_COUNT = 21;
 
 function ScannerFeed({
-  opportunities, onAdd, flippedTicker, onFlip,
+  opportunities, onAdd, flippedTicker, onFlip, columnRef,
 }: {
   opportunities: OpportunityWithPrice[];
   onAdd: (ticker: string) => void;
   flippedTicker: string | null;
   onFlip: (ticker: string | null) => void;
+  columnRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT);
   const [filter, setFilter] = useState<'All' | 'Hot Now' | 'Swing' | 'Run'>('All');
@@ -381,6 +383,7 @@ function ScannerFeed({
               isFlipped={flippedTicker === opp.ticker}
               onFlip={() => onFlip(flippedTicker === opp.ticker ? null : opp.ticker)}
               onAdd={onAdd}
+              columnRef={columnRef}
             />
           ))}
         </div>
@@ -407,14 +410,17 @@ function FlippableCard({
   isFlipped,
   onFlip,
   onAdd,
+  columnRef,
 }: {
   opportunity: OpportunityWithPrice;
   isFlipped: boolean;
   onFlip: () => void;
   onAdd: (ticker: string) => void;
+  columnRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [rect, setRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [closing, setClosing] = useState(false);
 
   const changeColor = (o.pct_change ?? 0) >= 0 ? 'text-mata-green' : 'text-mata-red';
   const changeSign = (o.pct_change ?? 0) >= 0 ? '+' : '';
@@ -438,16 +444,29 @@ function FlippableCard({
     { label: 'Regime', value: o.regime_fit_score, icon: '🎯' },
   ];
 
-  function handleFlip() {
-    if (!isFlipped && cardRef.current) {
+  function handleOpen() {
+    if (cardRef.current) {
       const r = cardRef.current.getBoundingClientRect();
       setRect({ top: r.top, left: r.left, width: r.width });
     }
+    setClosing(false);
     onFlip();
   }
 
-  // The expanded back is rendered as a fixed overlay so it can be much bigger
-  const expandedSize = rect ? rect.width * 3 : 300;
+  function handleClose() {
+    setClosing(true);
+    setTimeout(() => {
+      setClosing(false);
+      onFlip();
+    }, 450);
+  }
+
+  // Compute column center for the expansion target
+  const colRect = columnRef.current?.getBoundingClientRect();
+  const targetLeft = colRect ? colRect.left + colRect.width / 2 : (rect ? rect.left + rect.width / 2 : 0);
+  const targetTop = colRect ? colRect.top + Math.min(colRect.height / 2, window.innerHeight / 2) : (typeof window !== 'undefined' ? window.innerHeight / 2 : 400);
+
+  const expandedSize = rect ? rect.width * 3.5 : 350;
 
   return (
     <>
@@ -455,7 +474,7 @@ function FlippableCard({
         <div
           ref={cardRef}
           className="cursor-pointer"
-          onClick={handleFlip}
+          onClick={handleOpen}
         >
           {/* ═══ FRONT (always in grid) ═══ */}
           <div className={`aspect-square rounded-2xl border bg-mata-card p-2.5 flex flex-col justify-between transition-all duration-300 ${
@@ -500,30 +519,41 @@ function FlippableCard({
       </DraggableCard>
 
       {/* ═══ FLIPPED BACK (fixed overlay) ═══ */}
-      {isFlipped && rect && (
-        <div className="fixed inset-0 z-50" onClick={handleFlip}>
+      {(isFlipped || closing) && rect && (
+        <div className="fixed inset-0 z-50" onClick={handleClose}>
           {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm animate-[fadeIn_0.3s_ease-out]" />
+          <div className={`absolute inset-0 bg-black/30 backdrop-blur-sm transition-opacity duration-400 ${closing ? 'opacity-0' : 'animate-[fadeIn_0.3s_ease-out]'}`} />
 
-          {/* The card back — originates from the front card's position */}
+          {/* The card back — expands from card position to column center */}
           <div
-            className="absolute animate-[expandFromOrigin_0.5s_ease-out_forwards]"
+            className="absolute"
             onClick={(e) => e.stopPropagation()}
             style={{
               width: expandedSize,
               height: expandedSize,
               perspective: '1200px',
-              /* CSS custom props for the animation origin */
-              '--origin-top': `${rect.top + rect.width / 2}px`,
-              '--origin-left': `${rect.left + rect.width / 2}px`,
-              '--origin-size': `${rect.width}px`,
-              '--target-size': `${expandedSize}px`,
-            } as React.CSSProperties}
+              top: closing ? `${rect.top + rect.width / 2}px` : `${targetTop}px`,
+              left: closing ? `${rect.left + rect.width / 2}px` : `${targetLeft}px`,
+              transform: closing
+                ? `translate(-50%, -50%) scale(${rect.width / expandedSize})`
+                : 'translate(-50%, -50%) scale(1)',
+              opacity: closing ? 0 : 1,
+              transition: 'top 0.45s ease-in, left 0.45s ease-in, transform 0.45s ease-in, opacity 0.35s ease-in',
+              ...(!closing ? {
+                animation: 'expandToTarget 0.5s ease-out forwards',
+                '--origin-top': `${rect.top + rect.width / 2}px`,
+                '--origin-left': `${rect.left + rect.width / 2}px`,
+                '--origin-scale': `${rect.width / expandedSize}`,
+                '--target-top': `${targetTop}px`,
+                '--target-left': `${targetLeft}px`,
+              } as React.CSSProperties : {}),
+            }}
           >
             <div
-              className="w-full h-full animate-[flipIn_0.5s_ease-out_forwards]"
+              className={`w-full h-full ${closing ? '' : 'animate-[flipIn_0.5s_ease-out_forwards]'}`}
               style={{
                 transformStyle: 'preserve-3d',
+                ...(closing ? { transform: 'rotateY(-180deg)', transition: 'transform 0.45s ease-in' } : {}),
               }}
             >
               <div
@@ -550,7 +580,7 @@ function FlippableCard({
                       </div>
                     </div>
                     <button
-                      onClick={handleFlip}
+                      onClick={handleClose}
                       className="rounded-lg p-1.5 text-mata-text-muted hover:text-mata-text hover:bg-mata-surface transition-all"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>

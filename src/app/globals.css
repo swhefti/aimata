@@ -59,21 +59,17 @@
   }
 }
 
-@keyframes expandFromOrigin {
+@keyframes expandToTarget {
   0% {
     top: var(--origin-top);
     left: var(--origin-left);
-    width: var(--origin-size);
-    height: var(--origin-size);
-    transform: translate(-50%, -50%);
-    opacity: 0.5;
+    transform: translate(-50%, -50%) scale(var(--origin-scale));
+    opacity: 0.3;
   }
   100% {
-    top: 50%;
-    left: 50%;
-    width: var(--target-size);
-    height: var(--target-size);
-    transform: translate(-50%, -50%);
+    top: var(--target-top);
+    left: var(--target-left);
+    transform: translate(-50%, -50%) scale(1);
     opacity: 1;
   }
 }
