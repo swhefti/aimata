@@ -505,18 +505,20 @@ function FlippableCard({
           {/* Backdrop */}
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm animate-[fadeIn_0.3s_ease-out]" />
 
-          {/* The card back */}
+          {/* The card back — originates from the front card's position */}
           <div
-            className="absolute"
+            className="absolute animate-[expandFromOrigin_0.5s_ease-out_forwards]"
             onClick={(e) => e.stopPropagation()}
             style={{
               width: expandedSize,
               height: expandedSize,
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
               perspective: '1200px',
-            }}
+              /* CSS custom props for the animation origin */
+              '--origin-top': `${rect.top + rect.width / 2}px`,
+              '--origin-left': `${rect.left + rect.width / 2}px`,
+              '--origin-size': `${rect.width}px`,
+              '--target-size': `${expandedSize}px`,
+            } as React.CSSProperties}
           >
             <div
               className="w-full h-full animate-[flipIn_0.5s_ease-out_forwards]"
@@ -615,10 +617,10 @@ function FlippableCard({
                   </div>
 
                   {/* Back footer */}
-                  <div className="px-5 py-3 border-t border-mata-border">
+                  <div className="px-5 py-2.5 border-t border-mata-border flex justify-end">
                     <button
                       onClick={(e) => { e.stopPropagation(); onAdd(o.ticker); }}
-                      className="w-full rounded-xl bg-gradient-to-r from-mata-orange to-mata-orange-dark py-3 text-sm font-bold text-white hover:shadow-lg hover:shadow-mata-orange/20 transition-all active:scale-[0.98]"
+                      className="rounded-lg bg-gradient-to-r from-mata-orange to-mata-orange-dark px-4 py-1.5 text-[10px] font-bold text-white hover:shadow-md hover:shadow-mata-orange/20 transition-all active:scale-[0.97]"
                     >
                       + Add to Basket
                     </button>
