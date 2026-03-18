@@ -413,6 +413,9 @@ function FlippableCard({
   onFlip: () => void;
   onAdd: (ticker: string) => void;
 }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [rect, setRect] = useState<{ top: number; left: number; width: number } | null>(null);
+
   const changeColor = (o.pct_change ?? 0) >= 0 ? 'text-mata-green' : 'text-mata-red';
   const changeSign = (o.pct_change ?? 0) >= 0 ? '+' : '';
 
@@ -425,7 +428,6 @@ function FlippableCard({
   const scoreColor = o.opportunity_score >= 70 ? 'text-mata-green' : o.opportunity_score >= 50 ? 'text-mata-yellow' : 'text-mata-red';
   const scoreBg = o.opportunity_score >= 70 ? 'bg-mata-green/10' : o.opportunity_score >= 50 ? 'bg-mata-yellow/10' : 'bg-mata-red/10';
 
-  // Score breakdown for back
   const scores = [
     { label: 'Momentum', value: o.momentum_score, icon: '↗' },
     { label: 'Breakout', value: o.breakout_score, icon: '⬆' },
@@ -436,32 +438,31 @@ function FlippableCard({
     { label: 'Regime', value: o.regime_fit_score, icon: '🎯' },
   ];
 
+  function handleFlip() {
+    if (!isFlipped && cardRef.current) {
+      const r = cardRef.current.getBoundingClientRect();
+      setRect({ top: r.top, left: r.left, width: r.width });
+    }
+    onFlip();
+  }
+
+  // The expanded back is rendered as a fixed overlay so it can be much bigger
+  const expandedSize = rect ? rect.width * 3 : 300;
+
   return (
-    <DraggableCard id={o.ticker} disabled={isFlipped}>
-      <div
-        className={`relative cursor-pointer transition-all duration-500 ${isFlipped ? 'z-30' : 'z-0'}`}
-        style={{
-          perspective: '800px',
-          transformOrigin: 'center center',
-        }}
-        onClick={(e) => {
-          // Don't flip if clicking add button
-          if ((e.target as HTMLElement).closest('[data-action]')) return;
-          onFlip();
-        }}
-      >
+    <>
+      <DraggableCard id={o.ticker} disabled={isFlipped}>
         <div
-          className="relative transition-transform duration-500"
-          style={{
-            transformStyle: 'preserve-3d',
-            transform: isFlipped ? 'rotateY(180deg) scale(1.6)' : 'rotateY(0deg) scale(1)',
-          }}
+          ref={cardRef}
+          className="cursor-pointer"
+          onClick={handleFlip}
         >
-          {/* ═══ FRONT ═══ */}
-          <div
-            className="aspect-square rounded-2xl border border-mata-border bg-mata-card p-2.5 flex flex-col justify-between hover:card-glow hover:border-mata-orange/30 transition-shadow"
-            style={{ backfaceVisibility: 'hidden' }}
-          >
+          {/* ═══ FRONT (always in grid) ═══ */}
+          <div className={`aspect-square rounded-2xl border bg-mata-card p-2.5 flex flex-col justify-between transition-all duration-300 ${
+            isFlipped
+              ? 'border-mata-orange/40 opacity-40 scale-95'
+              : 'border-mata-border hover:card-glow hover:border-mata-orange/30'
+          }`}>
             {/* Top: label */}
             <div className="flex items-start justify-between">
               <span className={`text-[7px] font-black px-1.5 py-0.5 rounded-md border ${labelColor}`}>
@@ -495,88 +496,140 @@ function FlippableCard({
               )}
             </div>
           </div>
+        </div>
+      </DraggableCard>
 
-          {/* ═══ BACK ═══ */}
+      {/* ═══ FLIPPED BACK (fixed overlay) ═══ */}
+      {isFlipped && rect && (
+        <div className="fixed inset-0 z-50" onClick={handleFlip}>
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm animate-[fadeIn_0.3s_ease-out]" />
+
+          {/* The card back */}
           <div
-            className="absolute inset-0 aspect-square rounded-2xl border-2 border-mata-orange/30 bg-mata-card overflow-hidden"
+            className="absolute"
+            onClick={(e) => e.stopPropagation()}
             style={{
-              backfaceVisibility: 'hidden',
-              transform: 'rotateY(180deg)',
+              width: expandedSize,
+              height: expandedSize,
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              perspective: '1200px',
             }}
           >
-            <div className="h-full flex flex-col">
-              {/* Back header */}
-              <div className="flex items-center justify-between px-2.5 pt-2 pb-1 border-b border-mata-border/50">
-                <div className="flex items-center gap-1">
-                  <span className="text-[9px]">⚡</span>
-                  <span className="text-[9px] font-black text-mata-text">{o.ticker}</span>
-                  <span className={`${scoreBg} ${scoreColor} text-[8px] font-black px-1 rounded`}>{o.opportunity_score}</span>
-                </div>
-                <button
-                  data-action="close"
-                  onClick={(e) => { e.stopPropagation(); onFlip(); }}
-                  className="text-mata-text-muted hover:text-mata-text text-xs leading-none p-0.5"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* Scrollable content */}
-              <div className="flex-1 overflow-y-auto px-2.5 py-1.5 space-y-1.5">
-                {/* Setup info */}
-                <div className="text-[8px] text-mata-text-secondary leading-snug">
-                  <span className="font-bold text-mata-text">{o.setup_type}</span> setup · {o.opportunity_label} · {o.risk_label} risk
-                </div>
-
-                {/* Price chart */}
-                {o.price_history && o.price_history.length > 1 && (
-                  <div className="bg-mata-surface/50 rounded-lg p-1.5">
-                    <Sparkline data={o.price_history} width={180} height={40} strokeWidth={1.5} fillOpacity={0.15} />
-                  </div>
-                )}
-
-                {/* Score breakdown */}
-                <div className="space-y-0.5">
-                  <div className="text-[7px] font-black text-mata-text-muted uppercase tracking-wider">Score Breakdown</div>
-                  {scores.map((s) => (
-                    <div key={s.label} className="flex items-center gap-1">
-                      <span className="text-[8px] w-3">{s.icon}</span>
-                      <span className="text-[7px] text-mata-text-muted w-12 truncate">{s.label}</span>
-                      <div className="flex-1 h-1 rounded-full bg-mata-surface overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all"
-                          style={{
-                            width: `${s.value}%`,
-                            backgroundColor: s.value >= 70 ? '#22c55e' : s.value >= 40 ? '#f59e0b' : '#ef4444',
-                          }}
-                        />
+            <div
+              className="w-full h-full animate-[flipIn_0.5s_ease-out_forwards]"
+              style={{
+                transformStyle: 'preserve-3d',
+              }}
+            >
+              <div
+                className="w-full h-full rounded-2xl border-2 border-mata-orange/30 bg-mata-card shadow-2xl shadow-mata-orange/10 overflow-hidden"
+                style={{
+                  backfaceVisibility: 'hidden',
+                  transform: 'rotateY(0deg)',
+                }}
+              >
+                <div className="h-full flex flex-col">
+                  {/* Back header */}
+                  <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-mata-border">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">⚡</span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-black text-mata-text">{o.ticker}</span>
+                          <span className={`${scoreBg} ${scoreColor} text-sm font-black px-2 py-0.5 rounded-lg`}>{o.opportunity_score}</span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${labelColor}`}>
+                            {o.opportunity_label}
+                          </span>
+                        </div>
+                        <div className="text-xs text-mata-text-muted mt-0.5">{o.asset_name}</div>
                       </div>
-                      <span className="text-[7px] font-bold text-mata-text w-4 text-right">{s.value}</span>
                     </div>
-                  ))}
-                </div>
+                    <button
+                      onClick={handleFlip}
+                      className="rounded-lg p-1.5 text-mata-text-muted hover:text-mata-text hover:bg-mata-surface transition-all"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                    </button>
+                  </div>
 
-                {/* Explanation */}
-                <div className="text-[7px] text-mata-text-secondary leading-snug italic">
-                  &quot;{o.explanation}&quot;
-                </div>
-              </div>
+                  {/* Scrollable content */}
+                  <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+                    {/* Price + chart row */}
+                    <div className="flex items-start gap-4">
+                      <div>
+                        {o.last_price != null && (
+                          <div className="text-2xl font-black text-mata-text">${o.last_price.toFixed(2)}</div>
+                        )}
+                        {o.pct_change != null && (
+                          <div className={`text-sm font-bold ${changeColor}`}>
+                            {changeSign}{(o.pct_change * 100).toFixed(2)}%
+                          </div>
+                        )}
+                        <div className="text-[10px] text-mata-text-muted mt-1">
+                          {o.setup_type} setup · {o.risk_label} risk · ~{o.horizon_days}d horizon
+                        </div>
+                      </div>
+                      {o.price_history && o.price_history.length > 1 && (
+                        <div className="flex-1 bg-mata-surface/50 rounded-xl p-3">
+                          <Sparkline data={o.price_history} width={300} height={80} strokeWidth={2} fillOpacity={0.12} />
+                        </div>
+                      )}
+                    </div>
 
-              {/* Back footer: add button */}
-              <div className="px-2.5 pb-2 pt-1 border-t border-mata-border/50">
-                <button
-                  data-action="add"
-                  onClick={(e) => { e.stopPropagation(); onAdd(o.ticker); }}
-                  className="w-full rounded-lg bg-gradient-to-r from-mata-orange to-mata-orange-dark py-1.5 text-[9px] font-bold text-white hover:shadow-md hover:shadow-mata-orange/20 transition-all"
-                >
-                  + Add to Basket
-                </button>
+                    {/* Score breakdown */}
+                    <div>
+                      <div className="text-[10px] font-black text-mata-text-muted uppercase tracking-wider mb-2">Why this score?</div>
+                      <div className="space-y-2">
+                        {scores.map((s) => {
+                          const barColor = s.value >= 70 ? '#22c55e' : s.value >= 40 ? '#f59e0b' : '#ef4444';
+                          return (
+                            <div key={s.label} className="flex items-center gap-2">
+                              <span className="text-sm w-5 text-center">{s.icon}</span>
+                              <span className="text-xs font-semibold text-mata-text-secondary w-20">{s.label}</span>
+                              <div className="flex-1 h-2.5 rounded-full bg-mata-surface overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-700"
+                                  style={{ width: `${s.value}%`, backgroundColor: barColor }}
+                                />
+                              </div>
+                              <span className="text-xs font-black text-mata-text w-8 text-right">{s.value}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Mark's explanation */}
+                    <div className="bg-mata-surface/50 rounded-xl p-4">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <span className="text-sm">⚡</span>
+                        <span className="text-[10px] font-black text-mata-text uppercase tracking-wider">Mark&apos;s Take</span>
+                      </div>
+                      <p className="text-xs text-mata-text-secondary leading-relaxed">
+                        &quot;{o.explanation}&quot;
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Back footer */}
+                  <div className="px-5 py-3 border-t border-mata-border">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onAdd(o.ticker); }}
+                      className="w-full rounded-xl bg-gradient-to-r from-mata-orange to-mata-orange-dark py-3 text-sm font-bold text-white hover:shadow-lg hover:shadow-mata-orange/20 transition-all active:scale-[0.98]"
+                    >
+                      + Add to Basket
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </DraggableCard>
+      )}
+    </>
   );
 }
 
