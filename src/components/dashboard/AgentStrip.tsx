@@ -63,8 +63,12 @@ export default function AgentStrip({ opportunities, positions, analytics, signal
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
-      {lines.map(({ agent, line }) => (
-        <div key={agent} className="flex items-start gap-2 rounded-xl border border-mata-border bg-mata-card px-3 py-2">
+      {lines.map(({ agent, line }, i) => (
+        <div
+          key={agent}
+          className="flex items-start gap-2 rounded-xl border border-mata-border bg-mata-card px-3 py-2 animate-[slideInUp_0.3s_ease-out_both]"
+          style={{ animationDelay: `${i * 80}ms` }}
+        >
           <div className="flex-shrink-0 mt-0.5">
             <AgentAvatar agentName={agent} size="xs" />
           </div>

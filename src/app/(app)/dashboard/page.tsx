@@ -235,6 +235,25 @@ export default function DashboardPage() {
     } catch { /* silent */ }
   }, [fetchBasket, fetchAnalytics]);
 
+  const handleTrim = useCallback(async (ticker: string) => {
+    // Trim = halve the quantity
+    const pos = positions.find((p) => p.ticker === ticker);
+    if (!pos || pos.quantity <= 0) return;
+    const newQty = pos.quantity / 2;
+    try {
+      const res = await fetch('/api/basket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticker, asset_name: pos.asset_name, asset_type: pos.asset_type,
+          opportunity_score: pos.opportunity_score, risk_label: pos.risk_label,
+          setup_type: pos.setup_type, entry_price: pos.entry_price, quantity: newQty,
+        }),
+      });
+      if (res.ok) await Promise.all([fetchBasket(), fetchAnalytics()]);
+    } catch { /* silent */ }
+  }, [positions, fetchBasket, fetchAnalytics]);
+
   const handleRunScanner = async () => {
     setScannerRunning(true);
     try {
@@ -295,7 +314,7 @@ export default function DashboardPage() {
 
         {/* CENTER: Basket */}
         <div>
-          <DroppableBasketArea positions={positions} onRemove={handleRemoveFromBasket} onWeightChange={handleWeightChange} loadingBasket={loadingBasket} isDraggingFromFeed={dragSource === 'feed'} signals={signals} />
+          <DroppableBasketArea positions={positions} onRemove={handleRemoveFromBasket} onWeightChange={handleWeightChange} onTrim={handleTrim} loadingBasket={loadingBasket} isDraggingFromFeed={dragSource === 'feed'} signals={signals} />
           {dragSource === 'basket' && <RemoveDropZone />}
           {/* Paul's narrative review */}
           <div className="mt-3">
@@ -683,9 +702,9 @@ function FlippableCard({
 
 // ─── Droppable Basket Area ───
 function DroppableBasketArea({
-  positions, onRemove, onWeightChange, loadingBasket, isDraggingFromFeed, signals,
+  positions, onRemove, onWeightChange, onTrim, loadingBasket, isDraggingFromFeed, signals,
 }: {
-  positions: BasketPosition[]; onRemove: (t: string) => void; onWeightChange: (t: string, w: number) => void; loadingBasket: boolean; isDraggingFromFeed: boolean; signals: PositionSignal[];
+  positions: BasketPosition[]; onRemove: (t: string) => void; onWeightChange: (t: string, w: number) => void; onTrim: (t: string) => void; loadingBasket: boolean; isDraggingFromFeed: boolean; signals: PositionSignal[];
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: 'basket-drop' });
   return (
@@ -699,7 +718,7 @@ function DroppableBasketArea({
           </div>
         </div>
       ) : (
-        <BasketPanel positions={positions} onRemove={onRemove} onWeightChange={onWeightChange} isOver={isOver && isDraggingFromFeed} signals={signals} />
+        <BasketPanel positions={positions} onRemove={onRemove} onWeightChange={onWeightChange} onTrim={onTrim} isOver={isOver && isDraggingFromFeed} signals={signals} />
       )}
     </div>
   );
