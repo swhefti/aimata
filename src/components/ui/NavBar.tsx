@@ -6,6 +6,7 @@ import Logo from './Logo';
 
 const NAV_LINKS = [
   { href: '/dashboard', label: 'Dashboard' },
+  { href: '/market', label: 'Market' },
   { href: '/basket', label: 'Basket' },
   { href: '/settings', label: 'Settings' },
 ] as const;
