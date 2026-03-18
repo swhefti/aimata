@@ -1,122 +1,95 @@
 'use client';
 
-import type { OpportunityScore, AgentName } from '@/types';
-import ScoreRing from '@/components/ui/ScoreRing';
 import Badge from '@/components/ui/Badge';
-import AgentAvatar from '@/components/ui/AgentAvatar';
+import Sparkline from '@/components/ui/Sparkline';
+import type { OpportunityScore } from '@/types';
+
+type OpportunityWithPrice = OpportunityScore & {
+  last_price?: number;
+  daily_change?: number;
+  pct_change?: number;
+  price_history?: number[];
+};
 
 interface OpportunityCardProps {
-  opportunity: OpportunityScore & {
-    last_price?: number;
-    daily_change?: number;
-    pct_change?: number;
-  };
+  opportunity: OpportunityWithPrice;
   onAdd?: (ticker: string) => void;
+  compact?: boolean;
 }
 
-function labelVariant(label: string): 'hot' | 'swing' | 'run' | 'default' {
-  const lower = label.toLowerCase();
-  if (lower.includes('hot')) return 'hot';
-  if (lower.includes('swing')) return 'swing';
-  if (lower.includes('run')) return 'run';
-  return 'default';
-}
-
-function riskVariant(label: string): 'low' | 'medium' | 'high' | 'default' {
-  const lower = label.toLowerCase();
-  if (lower === 'low') return 'low';
-  if (lower === 'medium') return 'medium';
-  if (lower === 'high') return 'high';
-  return 'default';
-}
-
-export default function OpportunityCard({ opportunity, onAdd }: OpportunityCardProps) {
-  const {
-    ticker,
-    asset_name,
-    asset_type,
-    opportunity_score,
-    opportunity_label,
-    risk_label,
-    setup_type,
-    explanation,
-    agent_tag,
-    last_price,
-    pct_change,
-  } = opportunity;
-
-  const changePositive = (pct_change ?? 0) >= 0;
+export default function OpportunityCard({ opportunity: o, onAdd, compact }: OpportunityCardProps) {
+  const changeColor = (o.pct_change ?? 0) >= 0 ? 'text-mata-green' : 'text-mata-red';
+  const changeSign = (o.pct_change ?? 0) >= 0 ? '+' : '';
 
   return (
-    <div
-      className="group relative rounded-2xl border border-mata-border bg-mata-card p-4 transition-all duration-200 hover:card-glow-active hover:-translate-y-0.5 cursor-pointer"
-      data-draggable-ticker={ticker}
-    >
-      {/* Top row: ticker + score */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="text-lg font-black tracking-tight text-mata-text">
-              {ticker}
-            </h3>
-            <Badge
-              label={asset_type}
-              variant={asset_type === 'crypto' ? 'swing' : 'default'}
-            />
+    <div className="group relative rounded-xl border border-mata-border bg-mata-card p-3 transition-all hover:card-glow hover:border-mata-orange/30 cursor-grab active:cursor-grabbing">
+      {/* Top row: ticker + price + sparkline */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-black text-mata-text tracking-tight">{o.ticker}</span>
+              <Badge
+                label={o.asset_type === 'crypto' ? '₿' : '◆'}
+                variant={o.asset_type === 'crypto' ? 'hot' : 'default'}
+              />
+            </div>
+            <span className="text-[10px] text-mata-text-muted truncate">{o.asset_name}</span>
           </div>
-          <p className="mt-0.5 truncate text-xs text-mata-text-muted">{asset_name}</p>
         </div>
-        <ScoreRing score={opportunity_score} size={52} />
+
+        <div className="flex items-center gap-2">
+          {o.price_history && o.price_history.length > 1 && (
+            <Sparkline data={o.price_history} width={56} height={20} strokeWidth={1.2} />
+          )}
+          <div className="text-right">
+            {o.last_price != null && (
+              <div className="text-xs font-bold text-mata-text">${o.last_price.toFixed(2)}</div>
+            )}
+            {o.pct_change != null && (
+              <div className={`text-[10px] font-semibold ${changeColor}`}>
+                {changeSign}{(o.pct_change * 100).toFixed(1)}%
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Badges row */}
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        <Badge label={opportunity_label} variant={labelVariant(opportunity_label)} />
-        <Badge label={`Risk: ${risk_label}`} variant={riskVariant(risk_label)} />
-        <Badge label={setup_type} />
+      {/* Score + labels row */}
+      <div className="flex items-center gap-1.5 mt-2">
+        {/* Score pill */}
+        <div className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black ${
+          o.opportunity_score >= 70
+            ? 'bg-mata-green/10 text-mata-green'
+            : o.opportunity_score >= 50
+            ? 'bg-mata-yellow/10 text-mata-yellow'
+            : 'bg-mata-red/10 text-mata-red'
+        }`}>
+          {o.opportunity_score}
+        </div>
+        <Badge label={o.opportunity_label} variant={
+          o.opportunity_label === 'Hot Now' ? 'hot' : o.opportunity_label === 'Run' ? 'run' : 'swing'
+        } />
+        <Badge label={o.risk_label} variant={o.risk_label.toLowerCase() as 'low' | 'medium' | 'high'} />
+        <span className="text-[10px] text-mata-text-muted ml-auto">{o.setup_type}</span>
       </div>
 
       {/* Explanation */}
-      <p className="mt-3 text-xs leading-relaxed text-mata-text-secondary line-clamp-2">
-        {explanation}
-      </p>
+      {!compact && (
+        <p className="mt-1.5 text-[10px] text-mata-text-secondary leading-relaxed line-clamp-1">
+          {o.explanation}
+        </p>
+      )}
 
-      {/* Bottom row: agent + price + action */}
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <AgentAvatar agentName={agent_tag as AgentName} size="sm" />
-
-        <div className="flex items-center gap-3">
-          {last_price != null && (
-            <div className="text-right">
-              <div className="text-sm font-bold text-mata-text">
-                ${last_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              {pct_change != null && (
-                <div
-                  className={`text-[11px] font-semibold ${
-                    changePositive ? 'text-mata-green' : 'text-mata-red'
-                  }`}
-                >
-                  {changePositive ? '+' : ''}
-                  {pct_change.toFixed(2)}%
-                </div>
-              )}
-            </div>
-          )}
-
-          {onAdd && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onAdd(ticker);
-              }}
-              className="rounded-lg bg-mata-orange px-3 py-1.5 text-xs font-bold text-white transition-all hover:bg-mata-orange-dark active:scale-95"
-            >
-              + Basket
-            </button>
-          )}
-        </div>
-      </div>
+      {/* Add button - visible on hover */}
+      {onAdd && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onAdd(o.ticker); }}
+          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg bg-mata-orange px-2 py-1 text-[10px] font-bold text-white hover:bg-mata-orange-dark"
+        >
+          + Add
+        </button>
+      )}
     </div>
   );
 }

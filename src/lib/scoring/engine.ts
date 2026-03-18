@@ -331,19 +331,27 @@ function deriveOpportunityLabel(
   scores: ComponentScores,
   sorted: PriceHistory[]
 ): OpportunityLabel {
-  // Hot Now: very recent spike (high 5d momentum + high sentiment)
-  const ret5d = periodReturn(sorted, 5);
-  if (ret5d > 0.03 && scores.sentiment > 65) {
+  // Hot Now: strong short-term momentum + breakout near highs
+  // Uses momentum and breakout scores which are more reliable than raw sentiment
+  if (scores.momentum >= 80 && scores.breakout >= 70) {
+    return 'Hot Now';
+  }
+  // Also Hot Now if extremely strong momentum alone
+  if (scores.momentum >= 90) {
     return 'Hot Now';
   }
 
-  // Run: sustained uptrend (consistent momentum across timeframes)
-  const ret20d = periodReturn(sorted, 20);
-  if (ret20d > 0.05 && scores.momentum > 60 && scores.regimeFit > 55) {
+  // Run: sustained trend with regime fit
+  // Good momentum + strong regime alignment = sustained move
+  if (scores.momentum >= 60 && scores.regimeFit >= 65 && scores.breakout >= 50) {
+    return 'Run';
+  }
+  // Also Run if strong regime fit with decent catalyst
+  if (scores.regimeFit >= 70 && scores.catalyst >= 60 && scores.momentum >= 50) {
     return 'Run';
   }
 
-  // Swing: medium-term opportunity (mean reversion or moderate momentum)
+  // Everything else is Swing
   return 'Swing';
 }
 

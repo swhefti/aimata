@@ -164,7 +164,7 @@ export async function POST(request: Request) {
       .eq('ticker', ticker)
       .single();
 
-    const entryPrice = quote?.last_price ?? 0;
+    const entryPrice = body.entry_price ?? quote?.last_price ?? 0;
 
     // Upsert position
     const { error: upsertError } = await admin
