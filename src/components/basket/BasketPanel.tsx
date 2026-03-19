@@ -66,23 +66,26 @@ export default function BasketPanel({
       {/* ─── Performance Summary Card ─── */}
       {positions.length > 0 && (
         <div className="mx-3 mb-3 rounded-xl bg-gradient-to-br from-mata-surface to-mata-bg border border-mata-border p-3">
-          <div className="flex items-center justify-between gap-3">
-            {/* Total value */}
-            <div>
-              <div className="text-[9px] font-semibold text-mata-text-muted uppercase tracking-wider">Value</div>
+          <div className="flex items-center justify-between gap-2">
+            {/* Invested → Value */}
+            <div className="flex-1">
+              <div className="text-[9px] font-semibold text-mata-text-muted uppercase tracking-wider">Current Value</div>
               <div className="text-lg font-black text-mata-text leading-tight">
                 <AnimatedNumber value={totalValue} prefix="$" decimals={0} />
+              </div>
+              <div className="text-[9px] text-mata-text-muted mt-0.5">
+                Invested: ${totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </div>
             </div>
 
             {/* P&L */}
             <div className="text-right">
-              <div className="text-[9px] font-semibold text-mata-text-muted uppercase tracking-wider">P&L</div>
+              <div className="text-[9px] font-semibold text-mata-text-muted uppercase tracking-wider">Return</div>
               <div className="text-lg font-black leading-tight">
-                <AnimatedNumber value={totalPnl} prefix="$" decimals={2} colorize />
-              </div>
-              <div className="text-xs font-bold">
                 <AnimatedNumber value={totalPnlPct} suffix="%" decimals={2} colorize />
+              </div>
+              <div className="text-[10px] font-bold">
+                <AnimatedNumber value={totalPnl} prefix="$" decimals={2} colorize />
               </div>
             </div>
 
@@ -155,11 +158,15 @@ export default function BasketPanel({
             {/* Total weight bar */}
             <div className="mt-3 pt-3 border-t border-mata-border">
               <div className="flex items-center justify-between text-[10px] mb-1">
-                <span className="font-semibold text-mata-text-secondary">Total Weight</span>
+                <span className="font-semibold text-mata-text-secondary">Allocation</span>
                 <span className={`font-black ${
                   Math.abs(totalWeight - 100) < 1 ? 'text-mata-green' : 'text-mata-yellow'
                 }`}>
-                  {totalWeight.toFixed(1)}%
+                  {totalWeight.toFixed(1)}%{Math.abs(totalWeight - 100) >= 1 && (
+                    <span className="text-[8px] font-normal text-mata-text-muted ml-1">
+                      ({totalWeight < 100 ? `${(100 - totalWeight).toFixed(1)}% unallocated` : 'over 100%'})
+                    </span>
+                  )}
                 </span>
               </div>
               <div className="h-2 rounded-full bg-mata-surface overflow-hidden">
@@ -246,7 +253,7 @@ function BasketPositionRow({
             <button
               onClick={() => setEditing(true)}
               className="w-full rounded bg-mata-surface px-1 py-0.5 text-[9px] font-bold text-mata-text-secondary hover:bg-mata-border transition-colors text-center"
-              title="Click to edit weight"
+              title="Basket allocation — click to edit"
             >
               {effectiveWeight.toFixed(1)}%
             </button>
