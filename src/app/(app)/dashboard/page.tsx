@@ -20,6 +20,7 @@ import DailyBrief from '@/components/dashboard/DailyBrief';
 import AgentStrip from '@/components/dashboard/AgentStrip';
 import BasketNarrative from '@/components/basket/BasketNarrative';
 import { computePositionActions, type PositionSignal } from '@/lib/scoring/actions';
+import { useToast } from '@/components/ui/Toast';
 
 type OpportunityWithPrice = OpportunityScore & {
   last_price?: number;
@@ -33,16 +34,19 @@ function QuantityModal({
   ticker,
   assetName,
   price,
+  basketValue,
   onConfirm,
   onCancel,
 }: {
   ticker: string;
   assetName: string;
   price: number;
+  basketValue: number;
   onConfirm: (quantity: number) => void;
   onCancel: () => void;
 }) {
   const [qty, setQty] = useState('1');
+  const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -52,10 +56,14 @@ function QuantityModal({
 
   const parsedQty = parseFloat(qty) || 0;
   const totalValue = parsedQty * price;
+  const pctOfBasket = basketValue + totalValue > 0 ? (totalValue / (basketValue + totalValue)) * 100 : 100;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (parsedQty > 0) onConfirm(parsedQty);
+    if (parsedQty > 0 && !submitting) {
+      setSubmitting(true);
+      onConfirm(parsedQty);
+    }
   }
 
   return (
@@ -85,16 +93,21 @@ function QuantityModal({
           className="w-full rounded-xl border border-mata-border bg-mata-surface px-4 py-2.5 text-center text-lg font-black text-mata-text focus:border-mata-orange focus:outline-none focus:ring-2 focus:ring-mata-orange/20"
         />
         {parsedQty > 0 && (
-          <div className="mt-2 text-center text-xs text-mata-text-secondary">
-            Total: <span className="font-bold">${totalValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+          <div className="mt-2 text-center space-y-0.5">
+            <div className="text-xs text-mata-text-secondary">
+              Total: <span className="font-bold">${totalValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            </div>
+            <div className="text-[10px] text-mata-text-muted">
+              ~{pctOfBasket.toFixed(1)}% of basket after adding
+            </div>
           </div>
         )}
         <div className="flex gap-2 mt-4">
           <button type="button" onClick={onCancel} className="flex-1 rounded-xl border border-mata-border bg-mata-surface py-2 text-xs font-bold text-mata-text-secondary hover:bg-mata-border transition-all">
             Cancel
           </button>
-          <button type="submit" disabled={parsedQty <= 0} className="flex-1 rounded-xl bg-gradient-to-r from-mata-orange to-mata-orange-dark py-2 text-xs font-bold text-white hover:shadow-lg hover:shadow-mata-orange/20 disabled:opacity-50 transition-all">
-            Add to Basket
+          <button type="submit" disabled={parsedQty <= 0 || submitting} className="flex-1 rounded-xl bg-gradient-to-r from-mata-orange to-mata-orange-dark py-2 text-xs font-bold text-white hover:shadow-lg hover:shadow-mata-orange/20 disabled:opacity-50 transition-all">
+            {submitting ? 'Adding...' : 'Add to Basket'}
           </button>
         </div>
       </form>
@@ -135,6 +148,7 @@ function FeedSkeleton() {
 
 // ─── Main Dashboard ───
 export default function DashboardPage() {
+  const { toast } = useToast();
   const [opportunities, setOpportunities] = useState<OpportunityWithPrice[]>([]);
   const [positions, setPositions] = useState<BasketPosition[]>([]);
   const [analytics, setAnalytics] = useState<BasketAnalytics | null>(null);
@@ -149,11 +163,17 @@ export default function DashboardPage() {
   const [dragSource, setDragSource] = useState<'feed' | 'basket' | null>(null);
   const [flippedTicker, setFlippedTicker] = useState<string | null>(null);
   const [signals, setSignals] = useState<PositionSignal[]>([]);
+  const [lastScanned, setLastScanned] = useState<Date | null>(null);
 
   const [pendingAdd, setPendingAdd] = useState<{
     ticker: string; assetName: string; price: number; opportunityData: OpportunityWithPrice;
   } | null>(null);
   const scannerColRef = useRef<HTMLDivElement>(null);
+
+  // Filter scanner to exclude tickers already in basket
+  const basketTickers = new Set(positions.map((p) => p.ticker));
+  const filteredOpportunities = opportunities.filter((o) => !basketTickers.has(o.ticker));
+  const basketValue = positions.reduce((s, p) => s + p.current_price * p.quantity, 0);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -216,27 +236,37 @@ export default function DashboardPage() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ticker: opp.ticker, asset_name: opp.asset_name, asset_type: opp.asset_type, opportunity_score: opp.opportunity_score, risk_label: opp.risk_label, setup_type: opp.setup_type, entry_price: opp.last_price ?? 0, quantity }),
       });
-      if (res.ok) await Promise.all([fetchBasket(), fetchAnalytics()]);
-    } catch { /* silent */ }
+      if (res.ok) {
+        toast(`${opp.ticker} added to basket`);
+        await Promise.all([fetchBasket(), fetchAnalytics()]);
+      } else {
+        toast('Failed to add position', 'error');
+      }
+    } catch { toast('Failed to add position', 'error'); }
     setPendingAdd(null);
-  }, [pendingAdd, fetchBasket, fetchAnalytics]);
+  }, [pendingAdd, fetchBasket, fetchAnalytics, toast]);
 
   const handleRemoveFromBasket = useCallback(async (ticker: string) => {
     try {
       const res = await fetch(`/api/basket?ticker=${encodeURIComponent(ticker)}`, { method: 'DELETE' });
-      if (res.ok) await Promise.all([fetchBasket(), fetchAnalytics()]);
-    } catch { /* silent */ }
-  }, [fetchBasket, fetchAnalytics]);
+      if (res.ok) {
+        toast(`${ticker} removed from basket`);
+        await Promise.all([fetchBasket(), fetchAnalytics()]);
+      }
+    } catch { toast('Failed to remove position', 'error'); }
+  }, [fetchBasket, fetchAnalytics, toast]);
 
   const handleWeightChange = useCallback(async (ticker: string, weight: number) => {
     try {
       const res = await fetch('/api/basket/weight', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticker, manual_weight: weight }) });
-      if (res.ok) await Promise.all([fetchBasket(), fetchAnalytics()]);
-    } catch { /* silent */ }
-  }, [fetchBasket, fetchAnalytics]);
+      if (res.ok) {
+        toast(`${ticker} weight updated to ${weight.toFixed(1)}%`);
+        await Promise.all([fetchBasket(), fetchAnalytics()]);
+      }
+    } catch { toast('Failed to update weight', 'error'); }
+  }, [fetchBasket, fetchAnalytics, toast]);
 
   const handleTrim = useCallback(async (ticker: string) => {
-    // Trim = halve the quantity
     const pos = positions.find((p) => p.ticker === ticker);
     if (!pos || pos.quantity <= 0) return;
     const newQty = pos.quantity / 2;
@@ -250,16 +280,26 @@ export default function DashboardPage() {
           setup_type: pos.setup_type, entry_price: pos.entry_price, quantity: newQty,
         }),
       });
-      if (res.ok) await Promise.all([fetchBasket(), fetchAnalytics()]);
-    } catch { /* silent */ }
-  }, [positions, fetchBasket, fetchAnalytics]);
+      if (res.ok) {
+        toast(`${ticker} trimmed 50%`);
+        await Promise.all([fetchBasket(), fetchAnalytics()]);
+      }
+    } catch { toast('Failed to trim position', 'error'); }
+  }, [positions, fetchBasket, fetchAnalytics, toast]);
 
   const handleRunScanner = async () => {
     setScannerRunning(true);
     try {
       const res = await fetch('/api/scanner/run', { method: 'POST' });
-      if (res.ok) await fetchOpportunities();
-    } catch { /* silent */ } finally { setScannerRunning(false); }
+      if (res.ok) {
+        const data = await res.json();
+        toast(`Scanner complete: ${data.total_scored ?? 0} assets scored, ${data.opportunities_surfaced ?? 0} surfaced`);
+        setLastScanned(new Date());
+        await fetchOpportunities();
+      } else {
+        toast('Scanner failed', 'error');
+      }
+    } catch { toast('Scanner failed', 'error'); } finally { setScannerRunning(false); }
   };
 
   // ─── DnD ───
@@ -290,25 +330,48 @@ export default function DashboardPage() {
           <h1 className="text-xl font-black text-mata-text tracking-tight">Dashboard</h1>
           <p className="text-[11px] text-mata-text-muted">Your trading command center</p>
         </div>
-        <button onClick={handleRunScanner} disabled={scannerRunning}
-          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-mata-orange to-mata-orange-dark px-4 py-2 text-xs font-bold text-white transition-all hover:shadow-lg hover:shadow-mata-orange/20 active:scale-[0.97] disabled:opacity-50">
-          {scannerRunning ? (
-            <><svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" /><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" className="opacity-75" /></svg>Scanning...</>
-          ) : (
-            <><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>Run Scanner</>
+        <div className="flex items-center gap-3">
+          {lastScanned && (
+            <span className="text-[9px] text-mata-text-muted">
+              Scanned {lastScanned.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+            </span>
           )}
-        </button>
+          <button onClick={handleRunScanner} disabled={scannerRunning}
+            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-mata-orange to-mata-orange-dark px-4 py-2 text-xs font-bold text-white transition-all hover:shadow-lg hover:shadow-mata-orange/20 active:scale-[0.97] disabled:opacity-50">
+            {scannerRunning ? (
+              <><svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" /><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" className="opacity-75" /></svg>Scanning...</>
+            ) : (
+              <><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>Run Scanner</>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Agent commentary strip */}
-      <AgentStrip opportunities={opportunities} positions={positions} analytics={analytics} signals={signals} />
+      <AgentStrip opportunities={filteredOpportunities} positions={positions} analytics={analytics} signals={signals} />
 
       {/* 3 equal columns */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* LEFT: Scanner */}
         <div ref={scannerColRef}>
-          {loadingFeed ? <FeedSkeleton /> : (
-            <ScannerFeed opportunities={opportunities} onAdd={showQuantityModal} flippedTicker={flippedTicker} onFlip={setFlippedTicker} columnRef={scannerColRef} />
+          {loadingFeed ? <FeedSkeleton /> : filteredOpportunities.length === 0 && opportunities.length === 0 ? (
+            <div className="rounded-2xl border-2 border-dashed border-mata-orange/30 bg-mata-orange/5 p-8 text-center">
+              <div className="text-3xl mb-3">⚡</div>
+              <h3 className="text-sm font-black text-mata-text mb-1">Welcome to aiMATA</h3>
+              <p className="text-[11px] text-mata-text-secondary mb-4 leading-relaxed">
+                Run the scanner to discover short-term opportunities.<br />
+                Then drag them into your basket to start building.
+              </p>
+              <button
+                onClick={handleRunScanner}
+                disabled={scannerRunning}
+                className="rounded-xl bg-gradient-to-r from-mata-orange to-mata-orange-dark px-5 py-2.5 text-xs font-bold text-white hover:shadow-lg hover:shadow-mata-orange/20 disabled:opacity-50 transition-all"
+              >
+                {scannerRunning ? 'Scanning...' : 'Run First Scan'}
+              </button>
+            </div>
+          ) : (
+            <ScannerFeed opportunities={filteredOpportunities} onAdd={showQuantityModal} flippedTicker={flippedTicker} onFlip={setFlippedTicker} columnRef={scannerColRef} />
           )}
         </div>
 
@@ -358,7 +421,7 @@ export default function DashboardPage() {
 
       {/* Quantity Modal */}
       {pendingAdd && (
-        <QuantityModal ticker={pendingAdd.ticker} assetName={pendingAdd.assetName} price={pendingAdd.price} onConfirm={confirmAddToBasket} onCancel={() => setPendingAdd(null)} />
+        <QuantityModal ticker={pendingAdd.ticker} assetName={pendingAdd.assetName} price={pendingAdd.price} basketValue={basketValue} onConfirm={confirmAddToBasket} onCancel={() => setPendingAdd(null)} />
       )}
     </DndContext>
   );

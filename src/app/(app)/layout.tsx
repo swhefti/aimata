@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import NavBar from '@/components/ui/NavBar';
+import Providers from '@/components/Providers';
 
 export default async function AppLayout({
   children,
@@ -19,7 +20,9 @@ export default async function AppLayout({
   return (
     <div className="min-h-screen bg-mata-bg">
       <NavBar />
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">{children}</main>
+      <Providers>
+        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">{children}</main>
+      </Providers>
     </div>
   );
 }
