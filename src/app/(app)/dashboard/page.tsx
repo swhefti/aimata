@@ -21,15 +21,6 @@ import AgentStrip from '@/components/dashboard/AgentStrip';
 import BasketNarrative from '@/components/basket/BasketNarrative';
 import { computePositionActions, type PositionSignal } from '@/lib/scoring/actions';
 
-function scoreLabel(score: number): string {
-  if (score >= 80) return 'Excellent';
-  if (score >= 70) return 'Strong';
-  if (score >= 60) return 'Good';
-  if (score >= 50) return 'Decent';
-  if (score >= 40) return 'Below avg';
-  return 'Weak';
-}
-
 type OpportunityWithPrice = OpportunityScore & {
   last_price?: number;
   daily_change?: number;
@@ -552,9 +543,6 @@ function FlippableCard({
               <div className="text-[8px] text-mata-text-muted truncate px-1">{o.asset_name}</div>
               <div className={`text-xl font-black ${scoreColor} mt-0.5 leading-none`}>
                 {o.opportunity_score}
-              </div>
-              <div className={`text-[7px] font-bold ${scoreColor} mt-0.5`}>
-                {scoreLabel(o.opportunity_score)}
               </div>
             </div>
 

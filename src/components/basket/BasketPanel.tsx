@@ -158,15 +158,11 @@ export default function BasketPanel({
             {/* Total weight bar */}
             <div className="mt-3 pt-3 border-t border-mata-border">
               <div className="flex items-center justify-between text-[10px] mb-1">
-                <span className="font-semibold text-mata-text-secondary">Allocation</span>
+                <span className="font-semibold text-mata-text-secondary">Total Weight</span>
                 <span className={`font-black ${
                   Math.abs(totalWeight - 100) < 1 ? 'text-mata-green' : 'text-mata-yellow'
                 }`}>
-                  {totalWeight.toFixed(1)}%{Math.abs(totalWeight - 100) >= 1 && (
-                    <span className="text-[8px] font-normal text-mata-text-muted ml-1">
-                      ({totalWeight < 100 ? `${(100 - totalWeight).toFixed(1)}% unallocated` : 'over 100%'})
-                    </span>
-                  )}
+                  {totalWeight.toFixed(1)}%
                 </span>
               </div>
               <div className="h-2 rounded-full bg-mata-surface overflow-hidden">
@@ -253,7 +249,7 @@ function BasketPositionRow({
             <button
               onClick={() => setEditing(true)}
               className="w-full rounded bg-mata-surface px-1 py-0.5 text-[9px] font-bold text-mata-text-secondary hover:bg-mata-border transition-colors text-center"
-              title="Basket allocation — click to edit"
+              title="Click to edit weight"
             >
               {effectiveWeight.toFixed(1)}%
             </button>
