@@ -9,6 +9,8 @@ export async function POST() {
       run_id: result.runId,
       total_scored: result.totalScored,
       opportunities_surfaced: result.surfaced,
+      scoring_version: result.scoringVersion,
+      data_freshness: result.dataFreshness,
     });
   } catch (error) {
     return NextResponse.json(

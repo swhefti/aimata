@@ -1,6 +1,7 @@
 'use client';
 
 import AgentAvatar from '@/components/ui/AgentAvatar';
+import ExplainDrawer from '@/components/agents/ExplainDrawer';
 import type { BasketPosition, BasketAnalytics } from '@/types';
 
 interface BasketNarrativeProps {
@@ -26,6 +27,18 @@ export default function BasketNarrative({ positions, analytics }: BasketNarrativ
             {n}
           </p>
         ))}
+      </div>
+      <div className="mt-2 pt-2 border-t border-blue-200/50">
+        <ExplainDrawer
+          type="basket"
+          agent="Paul"
+          label="Ask Paul for deeper review"
+          deterministicData={analytics ? [
+            { label: 'Quality', value: analytics.basket_quality },
+            { label: 'Probability', value: `${analytics.probability_score}/100` },
+            { label: 'Concentration', value: analytics.concentration_risk, color: analytics.concentration_risk === 'Low' ? 'text-mata-green' : 'text-mata-red' },
+          ] : []}
+        />
       </div>
     </div>
   );

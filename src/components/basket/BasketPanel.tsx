@@ -4,6 +4,7 @@ import { useState } from 'react';
 import AgentAvatar from '@/components/ui/AgentAvatar';
 import AnimatedNumber from '@/components/ui/AnimatedNumber';
 import Sparkline from '@/components/ui/Sparkline';
+import ExplainDrawer from '@/components/agents/ExplainDrawer';
 import type { BasketPosition } from '@/types';
 import { type PositionSignal, getActionStyle } from '@/lib/scoring/actions';
 
@@ -348,6 +349,22 @@ function BasketPositionRow({
               >
                 ✕
               </button>
+            </div>
+
+            {/* Rex: deeper explanation */}
+            <div className="mt-2 pt-2 border-t border-mata-border/30">
+              <ExplainDrawer
+                type="action"
+                ticker={p.ticker}
+                agent="Rex"
+                label="Ask Rex why"
+                deterministicData={[
+                  { label: 'Score', value: `${p.opportunity_score}/100` },
+                  { label: 'P&L', value: `${p.pnl_pct >= 0 ? '+' : ''}${p.pnl_pct.toFixed(1)}%`, color: p.pnl_pct >= 0 ? 'text-mata-green' : 'text-mata-red' },
+                  { label: 'Risk', value: p.risk_label },
+                  { label: 'Action', value: signal.action },
+                ]}
+              />
             </div>
           </div>
         </div>

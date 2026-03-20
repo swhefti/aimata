@@ -382,6 +382,45 @@ export async function getLatestRunScores(): Promise<{ runId: string | null; scor
   return { runId: latestRun.id, scores: (scores ?? []) as OpportunityScore[] };
 }
 
+// ─── Scanner Run Metadata ───
+
+/**
+ * Get the latest scanner run metadata (for provenance display).
+ */
+export async function getLatestRunMetadata(): Promise<{
+  id: string;
+  ran_at: string;
+  total_scored: number;
+  scoring_version?: string;
+  data_freshness?: Record<string, unknown>;
+} | null> {
+  const db = getAdminClient();
+  const { data } = await db
+    .schema('trader')
+    .from('opportunity_runs')
+    .select('*')
+    .order('ran_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  return data as typeof data & { scoring_version?: string; data_freshness?: Record<string, unknown> } | null;
+}
+
+/**
+ * Get persisted position actions for a basket (from last recommendation run).
+ */
+export async function getPersistedActions(basketId: string) {
+  const db = getAdminClient();
+  const { data } = await db
+    .schema('trader')
+    .from('position_actions')
+    .select('*')
+    .eq('basket_id', basketId)
+    .order('created_at', { ascending: false });
+
+  return data ?? [];
+}
+
 // ─── Briefs ───
 
 /**
