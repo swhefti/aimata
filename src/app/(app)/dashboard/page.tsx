@@ -19,6 +19,7 @@ import AnalyticsPanel from '@/components/basket/AnalyticsPanel';
 import DailyBrief from '@/components/dashboard/DailyBrief';
 import AgentStrip from '@/components/dashboard/AgentStrip';
 import BasketNarrative from '@/components/basket/BasketNarrative';
+import CommitteeBrief from '@/components/agents/CommitteeBrief';
 import { computePositionActions, type PositionSignal } from '@/lib/scoring/actions';
 import { useToast } from '@/components/ui/Toast';
 
@@ -396,8 +397,9 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* RIGHT: Analytics */}
-        <div>
+        {/* RIGHT: Analytics + Committee */}
+        <div className="space-y-4">
+          <CommitteeBrief />
           <AnalyticsPanel analytics={analytics} loading={loadingAnalytics} />
         </div>
       </div>
