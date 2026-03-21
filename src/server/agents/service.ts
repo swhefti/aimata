@@ -1,12 +1,13 @@
 /**
- * Agent Service — Phase 6
+ * Agent Service — Phase 6.5 hardened
  *
- * Real specialist agent layer that:
- * 1. Receives bounded context packages (not raw DB queries)
- * 2. Calls Claude with structured prompts
- * 3. Parses structured outputs (stance, confidence, drivers, risks, summary)
- * 4. Persists artifacts with provenance (agent_briefs + raw_llm_outputs)
- * 5. Falls back to deterministic outputs if LLM is unavailable
+ * Real specialist agent layer with:
+ * 1. Bounded context packages (not raw DB queries)
+ * 2. Structured prompts with versioning and role boundaries
+ * 3. Structured output parsing (stance, confidence, drivers, risks)
+ * 4. Persisted artifacts with full provenance (agent_briefs + raw_llm_outputs)
+ * 5. Robust fallback — deterministic core never breaks if agents fail
+ * 6. Latency/cost instrumentation per call
  *
  * Agents explain deterministic canon — they don't replace scoring math.
  */
@@ -16,8 +17,10 @@ import { getAdminClient } from '@/server/db';
 import { loadConfig, getConfigValue } from '@/lib/config/runtime';
 import {
   AGENT_SPECS,
+  PROMPT_VERSION,
   type AgentStructuredOutput,
   type AgentArtifact,
+  type ArtifactStatus,
   type MarketContext,
   type TickerContext,
   type BasketContext,
@@ -44,11 +47,12 @@ async function callAgent(
   const maxTokens = getConfigValue<number>(config, 'model.max_tokens');
 
   const spec = AGENT_SPECS[agentName];
-  const systemPrompt = `${spec.systemPrompt}\n\n${spec.outputInstruction}`;
+  const systemPrompt = `${spec.systemPrompt}\n\n${spec.boundaryInstruction}\n\n${spec.outputInstruction}`;
 
   let content = '';
   let structured: AgentStructuredOutput | null = null;
   let tokensUsed = 0;
+  let status: ArtifactStatus = 'success';
   const startTime = Date.now();
 
   try {
@@ -68,26 +72,36 @@ async function callAgent(
 
     tokensUsed = (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0);
 
-    // Try to parse structured output
     structured = parseStructuredOutput(rawText);
     content = structured?.summary ?? rawText;
+
+    if (!structured) {
+      // LLM responded but didn't produce valid structured output — still usable
+      status = 'fallback';
+    }
   } catch (err) {
-    // LLM unavailable — use the context as fallback
-    content = `${spec.name} is temporarily unavailable.`;
+    // LLM unavailable — produce deterministic fallback
+    status = 'failed';
+    content = buildFallbackContent(agentName, promptKey, contextMessage);
     console.error(`Agent ${agentName} call failed:`, err instanceof Error ? err.message : err);
   }
 
-  const durationMs = Date.now() - startTime;
+  const latencyMs = Date.now() - startTime;
 
   // ── Persist raw LLM output for audit trail ──
   try {
     await db.schema('trader').from('raw_llm_outputs').insert({
-      prompt_key: promptKey,
-      input_data: { system: systemPrompt.substring(0, 500), user: contextMessage.substring(0, 2000) },
+      prompt_key: `${promptKey}@${PROMPT_VERSION}`,
+      input_data: {
+        system: systemPrompt.substring(0, 500),
+        user: contextMessage.substring(0, 2000),
+        prompt_version: PROMPT_VERSION,
+        status,
+      },
       output_text: content,
       model: MODEL,
       tokens_used: tokensUsed,
-      duration_ms: durationMs,
+      duration_ms: latencyMs,
       created_at: new Date().toISOString(),
     });
   } catch {
@@ -103,9 +117,12 @@ async function callAgent(
     content,
     structured_output: structured,
     prompt_key: promptKey,
+    prompt_version: PROMPT_VERSION,
     model: MODEL,
     source_run_id: sourceRunId,
     tokens_used: tokensUsed,
+    latency_ms: latencyMs,
+    status,
     created_at: new Date().toISOString(),
   };
 
@@ -117,9 +134,9 @@ async function callAgent(
       brief_type: artifact.brief_type,
       subject_type: subjectType,
       subject_id: subjectId,
-      prompt_key: promptKey,
+      prompt_key: `${promptKey}@${PROMPT_VERSION}`,
       model: MODEL,
-      structured_output: structured,
+      structured_output: structured ? { ...structured, status, latency_ms: latencyMs } : { status, latency_ms: latencyMs },
       source_run_id: sourceRunId,
       tokens_used: tokensUsed,
       metadata: null,
@@ -137,7 +154,6 @@ async function callAgent(
 // ─── Structured output parsing ───
 
 function parseStructuredOutput(text: string): AgentStructuredOutput | null {
-  // Try to extract JSON from the response
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) return null;
 
@@ -146,61 +162,78 @@ function parseStructuredOutput(text: string): AgentStructuredOutput | null {
     if (parsed.stance && parsed.summary) {
       return {
         stance: parsed.stance,
-        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
-        topDrivers: Array.isArray(parsed.topDrivers) ? parsed.topDrivers : [],
-        risks: Array.isArray(parsed.risks) ? parsed.risks : [],
-        summary: parsed.summary,
+        confidence: typeof parsed.confidence === 'number' ? Math.min(1, Math.max(0, parsed.confidence)) : 0.5,
+        topDrivers: Array.isArray(parsed.topDrivers) ? parsed.topDrivers.slice(0, 5) : [],
+        risks: Array.isArray(parsed.risks) ? parsed.risks.slice(0, 5) : [],
+        summary: String(parsed.summary).substring(0, 500),
       };
     }
   } catch {
-    // Not valid JSON — return null, use raw text
+    // Not valid JSON
   }
   return null;
 }
 
+// ─── Deterministic Fallback ───
+
+function buildFallbackContent(agentName: AgentName, promptKey: string, context: string): string {
+  const spec = AGENT_SPECS[agentName];
+
+  // Extract basic info from context for a useful fallback
+  const tickerMatch = context.match(/Ticker:\s*(\w+)/);
+  const ticker = tickerMatch?.[1] ?? '';
+  const scoreMatch = context.match(/Score:\s*(\d+)/);
+  const score = scoreMatch?.[1] ?? '';
+
+  switch (agentName) {
+    case 'Mark':
+      return ticker
+        ? `${ticker} scores ${score}/100. Review the component scores above for setup details. Mark's AI assessment is temporarily unavailable.`
+        : `Market data is available above. Mark's AI assessment is temporarily unavailable.`;
+    case 'Nia':
+      return ticker
+        ? `Check the catalyst and sentiment scores for ${ticker} in the system data above. Nia's narrative assessment is temporarily unavailable.`
+        : `Sentiment data is shown in the system metrics. Nia's AI assessment is temporarily unavailable.`;
+    case 'Paul':
+      return `Basket analytics are shown above (concentration, correlation, quality). Paul's deeper review is temporarily unavailable.`;
+    case 'Rex':
+      return `The system action recommendation is shown above. Rex's tactical explanation is temporarily unavailable.`;
+    default:
+      return `Agent assessment is temporarily unavailable. System data remains available above.`;
+  }
+}
+
 // ─── Specialist Functions ───
 
-/**
- * Mark: Generate opportunity commentary for a specific ticker.
- */
 export async function markTickerCommentary(
   ctx: TickerContext,
   userId: string | null = null,
   sourceRunId: string | null = null,
 ): Promise<AgentArtifact> {
-  const message = `Analyze this opportunity:
+  const message = `Analyze this opportunity setup:
 Ticker: ${ctx.ticker} (${ctx.name}) — ${ctx.assetType}${ctx.sector ? `, ${ctx.sector}` : ''}
 Price: $${ctx.price?.toFixed(2) ?? 'N/A'} (${ctx.changePct != null ? (ctx.changePct >= 0 ? '+' : '') + (ctx.changePct * 100).toFixed(1) + '%' : 'N/A'})
 Opportunity Score: ${ctx.scores.opportunity}/100 — ${ctx.label}, ${ctx.riskLabel} risk, ${ctx.setupType} setup
-Component Scores: Momentum ${ctx.scores.momentum}, Breakout ${ctx.scores.breakout}, Reversion ${ctx.scores.meanReversion}, Catalyst ${ctx.scores.catalyst}, Sentiment ${ctx.scores.sentiment}, Volatility ${ctx.scores.volatility}, Regime ${ctx.scores.regimeFit}
-Horizon: ~${ctx.horizonDays} days
-${ctx.fundamentals ? `Fundamentals: PE ${ctx.fundamentals.peRatio ?? 'N/A'}, Revenue Growth ${ctx.fundamentals.revenueGrowth != null ? (ctx.fundamentals.revenueGrowth * 100).toFixed(1) + '%' : 'N/A'}, Margin ${ctx.fundamentals.profitMargin != null ? (ctx.fundamentals.profitMargin * 100).toFixed(1) + '%' : 'N/A'}` : ''}`;
+Components: Momentum ${ctx.scores.momentum}, Breakout ${ctx.scores.breakout}, Reversion ${ctx.scores.meanReversion}, Catalyst ${ctx.scores.catalyst}, Sentiment ${ctx.scores.sentiment}, Volatility ${ctx.scores.volatility}, Regime ${ctx.scores.regimeFit}
+Horizon: ~${ctx.horizonDays} days`;
 
   return callAgent('Mark', 'mark.ticker_commentary', message, 'ticker', ctx.ticker, sourceRunId, userId);
 }
 
-/**
- * Nia: Generate sentiment/catalyst commentary for a ticker.
- */
 export async function niaTickerCommentary(
   ctx: TickerContext,
   userId: string | null = null,
   sourceRunId: string | null = null,
 ): Promise<AgentArtifact> {
-  const message = `Assess the narrative and sentiment for:
+  const message = `Assess the narrative and catalyst quality for:
 Ticker: ${ctx.ticker} (${ctx.name}) — ${ctx.assetType}
 Catalyst Score: ${ctx.scores.catalyst}/100
-Sentiment Score: ${ctx.scores.sentiment}/100
-Volume-based sentiment suggests: ${ctx.scores.sentiment >= 65 ? 'elevated market attention' : ctx.scores.sentiment >= 45 ? 'normal activity' : 'below-average interest'}
-${ctx.fundamentals ? `Revenue Growth: ${ctx.fundamentals.revenueGrowth != null ? (ctx.fundamentals.revenueGrowth * 100).toFixed(1) + '%' : 'N/A'}, Profit Margin: ${ctx.fundamentals.profitMargin != null ? (ctx.fundamentals.profitMargin * 100).toFixed(1) + '%' : 'N/A'}, ROE: ${ctx.fundamentals.roe != null ? (ctx.fundamentals.roe * 100).toFixed(1) + '%' : 'N/A'}` : 'No fundamental data available (likely crypto).'}
-Current setup: ${ctx.setupType}, ${ctx.label}, ${ctx.riskLabel} risk`;
+Sentiment Score: ${ctx.scores.sentiment}/100 (${ctx.scores.sentiment >= 65 ? 'elevated attention' : ctx.scores.sentiment >= 45 ? 'normal' : 'below average'})
+${ctx.fundamentals ? `Revenue Growth: ${ctx.fundamentals.revenueGrowth != null ? (ctx.fundamentals.revenueGrowth * 100).toFixed(1) + '%' : 'N/A'}, Margin: ${ctx.fundamentals.profitMargin != null ? (ctx.fundamentals.profitMargin * 100).toFixed(1) + '%' : 'N/A'}, ROE: ${ctx.fundamentals.roe != null ? (ctx.fundamentals.roe * 100).toFixed(1) + '%' : 'N/A'}` : 'No fundamental data (likely crypto).'}`;
 
   return callAgent('Nia', 'nia.ticker_commentary', message, 'ticker', ctx.ticker, sourceRunId, userId);
 }
 
-/**
- * Paul: Generate basket health assessment.
- */
 export async function paulBasketBrief(
   ctx: BasketContext,
   userId: string,
@@ -210,41 +243,30 @@ export async function paulBasketBrief(
     (p) => `  ${p.ticker}: ${p.weight.toFixed(1)}% weight, ${p.pnlPct >= 0 ? '+' : ''}${p.pnlPct.toFixed(1)}% P&L, score ${p.score}, ${p.riskLabel} risk`
   ).join('\n');
 
-  const message = `Assess this basket:
+  const message = `Assess this basket's health and balance:
 Positions: ${ctx.positionCount} (${ctx.winners}W / ${ctx.losers}L)
 Value: $${ctx.totalValue.toFixed(0)} | Invested: $${ctx.totalCost.toFixed(0)} | Return: ${ctx.totalPnlPct >= 0 ? '+' : ''}${ctx.totalPnlPct.toFixed(1)}%
 ${positionLines}
-${ctx.analytics ? `
-Analytics:
-  Probability Score: ${ctx.analytics.probabilityScore}/100 (${ctx.analytics.basketQuality})
-  Concentration: ${ctx.analytics.concentrationRisk} (largest: ${ctx.analytics.largestPosition} at ${ctx.analytics.largestPositionPct.toFixed(0)}%)
-  Correlation: ${ctx.analytics.correlationRisk}
-  Crypto: ${ctx.analytics.cryptoAllocation.toFixed(0)}%` : ''}`;
+${ctx.analytics ? `Analytics: Probability ${ctx.analytics.probabilityScore}/100 (${ctx.analytics.basketQuality}), Concentration: ${ctx.analytics.concentrationRisk}, Correlation: ${ctx.analytics.correlationRisk}, Crypto: ${ctx.analytics.cryptoAllocation.toFixed(0)}%, Largest: ${ctx.analytics.largestPosition} at ${ctx.analytics.largestPositionPct.toFixed(0)}%` : ''}`;
 
   return callAgent('Paul', 'paul.basket_brief', message, 'basket', null, sourceRunId, userId);
 }
 
-/**
- * Rex: Generate tactical action explanation.
- */
 export async function rexActionExplanation(
   ctx: ActionContext,
   basketCtx: BasketContext | null,
   userId: string,
 ): Promise<AgentArtifact> {
-  const message = `Explain this recommended action:
+  const message = `Justify this recommended action:
 Action: ${ctx.action} on ${ctx.ticker}
 Urgency: ${ctx.urgency}
 System reason: ${ctx.reason}
 Position: ${ctx.positionWeight.toFixed(1)}% of basket, P&L ${ctx.pnlPct >= 0 ? '+' : ''}${ctx.pnlPct.toFixed(1)}%, score ${ctx.opportunityScore}/100, ${ctx.riskLabel} risk
-${basketCtx ? `Basket: ${basketCtx.positionCount} positions, ${basketCtx.totalPnlPct >= 0 ? '+' : ''}${basketCtx.totalPnlPct.toFixed(1)}% overall` : ''}`;
+${basketCtx ? `Basket context: ${basketCtx.positionCount} positions, overall ${basketCtx.totalPnlPct >= 0 ? '+' : ''}${basketCtx.totalPnlPct.toFixed(1)}%` : ''}`;
 
   return callAgent('Rex', 'rex.action_explanation', message, 'recommendation', ctx.ticker, null, userId);
 }
 
-/**
- * Generate a full market brief from Mark.
- */
 export async function markMarketBrief(
   ctx: MarketContext,
   userId: string | null = null,
@@ -254,23 +276,16 @@ export async function markMarketBrief(
     (o) => `  ${o.ticker} (${o.name}): ${o.score}/100, ${o.label}, ${o.setupType}, ${o.riskLabel} risk`
   ).join('\n');
 
-  const message = `Market scanner report:
-Universe: ${ctx.totalAssets} assets scanned
-Distribution: ${ctx.hotNowCount} Hot Now, ${ctx.swingCount} Swing, ${ctx.runCount} Run
+  const message = `Summarize the market scan results:
+Universe: ${ctx.totalAssets} assets | ${ctx.hotNowCount} Hot Now, ${ctx.swingCount} Swing, ${ctx.runCount} Run
 Last scan: ${ctx.lastScanAt ?? 'unknown'}
-Top setups:
-${topLines}`;
+Top setups:\n${topLines}`;
 
   return callAgent('Mark', 'mark.market_brief', message, 'market', null, sourceRunId, userId);
 }
 
-// ─── Contextual Ask (minimal interaction entry point) ───
+// ─── Contextual Ask ───
 
-/**
- * Ask a specific agent a contextual question about a subject.
- * This is the Phase 6 minimal interaction entry point.
- * Not a full chat system — single question, grounded response.
- */
 export async function askAgent(
   agentName: AgentName,
   question: string,
@@ -285,9 +300,6 @@ export async function askAgent(
 
 // ─── Retrieve persisted artifacts ───
 
-/**
- * Get the latest artifact for a subject from a specific agent.
- */
 export async function getLatestArtifact(
   agentName: AgentName,
   subjectType: string,
@@ -303,36 +315,17 @@ export async function getLatestArtifact(
     .order('created_at', { ascending: false })
     .limit(1);
 
-  // Only filter by subject_type/id if the columns exist (migration may not have run)
   try {
     if (subjectType) query = query.eq('subject_type', subjectType);
     if (subjectId) query = query.eq('subject_id', subjectId);
-  } catch {
-    // Columns may not exist yet
-  }
+  } catch { /* columns may not exist */ }
 
   const { data } = await query.single();
   if (!data) return null;
 
-  return {
-    id: data.id as string,
-    agent_name: data.agent_name as AgentName,
-    subject_type: (data.subject_type as AgentArtifact['subject_type']) ?? 'market',
-    subject_id: (data.subject_id as string) ?? null,
-    brief_type: data.brief_type as string,
-    content: data.content as string,
-    structured_output: (data.structured_output as AgentStructuredOutput) ?? null,
-    prompt_key: (data.prompt_key as string) ?? '',
-    model: (data.model as string) ?? '',
-    source_run_id: (data.source_run_id as string) ?? null,
-    tokens_used: (data.tokens_used as number) ?? null,
-    created_at: data.created_at as string,
-  };
+  return mapToArtifact(data);
 }
 
-/**
- * Get all recent artifacts for a subject (all agents).
- */
 export async function getArtifactsForSubject(
   subjectType: string,
   subjectId: string | null,
@@ -350,24 +343,38 @@ export async function getArtifactsForSubject(
   try {
     if (subjectType) query = query.eq('subject_type', subjectType);
     if (subjectId) query = query.eq('subject_id', subjectId);
-  } catch {
-    // Columns may not exist
-  }
+  } catch { /* columns may not exist */ }
 
   const { data } = await query;
+  return (data ?? []).map(mapToArtifact);
+}
 
-  return (data ?? []).map((d: Record<string, unknown>) => ({
+function mapToArtifact(d: Record<string, unknown>): AgentArtifact {
+  const so = d.structured_output as Record<string, unknown> | null;
+  const status = (so?.status as ArtifactStatus) ?? 'success';
+  const latencyMs = (so?.latency_ms as number) ?? null;
+
+  return {
     id: d.id as string,
     agent_name: d.agent_name as AgentName,
     subject_type: (d.subject_type as AgentArtifact['subject_type']) ?? 'market',
     subject_id: (d.subject_id as string) ?? null,
     brief_type: d.brief_type as string,
     content: d.content as string,
-    structured_output: (d.structured_output as AgentStructuredOutput) ?? null,
+    structured_output: so && typeof so.stance === 'string' ? {
+      stance: so.stance as AgentStructuredOutput['stance'],
+      confidence: (so.confidence as number) ?? 0.5,
+      topDrivers: (so.topDrivers as string[]) ?? [],
+      risks: (so.risks as string[]) ?? [],
+      summary: (so.summary as string) ?? d.content as string,
+    } : null,
     prompt_key: (d.prompt_key as string) ?? '',
+    prompt_version: ((d.prompt_key as string) ?? '').split('@')[1] ?? PROMPT_VERSION,
     model: (d.model as string) ?? '',
     source_run_id: (d.source_run_id as string) ?? null,
     tokens_used: (d.tokens_used as number) ?? null,
+    latency_ms: latencyMs,
+    status,
     created_at: d.created_at as string,
-  }));
+  };
 }
