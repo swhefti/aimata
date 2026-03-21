@@ -9,6 +9,7 @@ const NAV_LINKS = [
   { href: '/market', label: 'Market' },
   { href: '/basket', label: 'Basket' },
   { href: '/settings', label: 'Settings' },
+  { href: '/admin', label: 'Admin' },
 ] as const;
 
 export default function NavBar() {
