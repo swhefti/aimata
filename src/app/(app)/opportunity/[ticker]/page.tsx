@@ -4,6 +4,7 @@ import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import type { OpportunityScore, AgentName } from '@/types';
 import AgentCommentary from '@/components/agents/AgentCommentary';
+import AskAgent from '@/components/agents/AskAgent';
 
 interface OpportunityDetail extends OpportunityScore {
   last_price?: number;
@@ -415,6 +416,20 @@ export default function OpportunityDetailPage({
             </>
           )}
         </div>
+      </div>
+
+      {/* Ask the team about this ticker */}
+      <div className="px-6 pb-2">
+        <AskAgent
+          subjectType="ticker"
+          subjectId={ticker}
+          placeholder={`Ask about ${ticker}...`}
+          suggestions={[
+            'Why is this setup strong?',
+            'Is this supported by fundamentals?',
+            'Should I add this to my basket?',
+          ]}
+        />
       </div>
 
       {/* Add to Basket CTA */}

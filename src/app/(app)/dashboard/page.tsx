@@ -20,6 +20,7 @@ import DailyBrief from '@/components/dashboard/DailyBrief';
 import AgentStrip from '@/components/dashboard/AgentStrip';
 import BasketNarrative from '@/components/basket/BasketNarrative';
 import CommitteeBrief from '@/components/agents/CommitteeBrief';
+import AskAgent from '@/components/agents/AskAgent';
 import { computePositionActions, type PositionSignal } from '@/lib/scoring/actions';
 import { useToast } from '@/components/ui/Toast';
 
@@ -383,6 +384,14 @@ export default function DashboardPage() {
           {/* Paul's narrative review */}
           <div className="mt-3">
             <BasketNarrative positions={positions} analytics={analytics} />
+          </div>
+          {/* Ask the team */}
+          <div className="mt-2">
+            <AskAgent
+              subjectType="basket"
+              placeholder="Ask about your basket..."
+              suggestions={['Is my basket too concentrated?', 'Should I trim anything?', 'What looks strongest right now?']}
+            />
           </div>
           <div className="mt-3">
             <DailyBrief
