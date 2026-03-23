@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { getCurrentUser } from '@/server/db';
 
 export async function GET() {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
-    if (error || !user) {
+    if (!user) {
       return NextResponse.json({ user: null });
     }
 
@@ -19,9 +18,8 @@ export async function GET() {
       },
     });
   } catch (error) {
-    console.error('Failed to get user:', error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown' },
       { status: 500 }
     );
   }

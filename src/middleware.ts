@@ -3,11 +3,21 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 const PUBLIC_PATHS = ['/login', '/auth/callback'];
 
+const ADMIN_EMAILS = ['shefti@gmail.com'];
+
 function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith('/api/')) return true;
   return PUBLIC_PATHS.some(
     (p) => pathname === p || pathname.startsWith(p + '/')
   );
+}
+
+function isAdminPath(pathname: string): boolean {
+  return pathname === '/admin' || pathname.startsWith('/admin/');
+}
+
+function isAdminApiPath(pathname: string): boolean {
+  return pathname.startsWith('/api/admin');
 }
 
 export async function middleware(request: NextRequest) {
@@ -22,7 +32,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
+          cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
           supabaseResponse = NextResponse.next({ request });
@@ -34,25 +44,43 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresh session - IMPORTANT: do not remove this
+  // Refresh session
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
 
-  // If user is not authenticated and path is protected, redirect to login
+  // Unauthenticated → redirect to login (except public paths)
   if (!user && !isPublicPath(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
   }
 
-  // If user is authenticated and on login page, redirect to dashboard
+  // Authenticated on login → redirect to dashboard
   if (user && pathname === '/login') {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
     return NextResponse.redirect(url);
+  }
+
+  // Admin page access: require admin email
+  if (user && isAdminPath(pathname)) {
+    const email = user.email?.toLowerCase();
+    if (!email || !ADMIN_EMAILS.includes(email)) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/dashboard';
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // Admin API access: require admin email
+  if (user && isAdminApiPath(pathname)) {
+    const email = user.email?.toLowerCase();
+    if (!email || !ADMIN_EMAILS.includes(email)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
   }
 
   return supabaseResponse;
@@ -60,13 +88,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon)
-     * - public folder assets
-     */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
