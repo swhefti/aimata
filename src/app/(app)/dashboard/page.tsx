@@ -15,7 +15,6 @@ import {
 import type { OpportunityScore, BasketPosition, BasketAnalytics } from '@/types';
 import Sparkline from '@/components/ui/Sparkline';
 import BasketPanel from '@/components/basket/BasketPanel';
-import AnalyticsPanel from '@/components/basket/AnalyticsPanel';
 import DailyBrief from '@/components/dashboard/DailyBrief';
 import DashboardSummary from '@/components/dashboard/DashboardSummary';
 import PositionDetail from '@/components/basket/PositionDetail';
@@ -378,22 +377,21 @@ export default function DashboardPage() {
         </div>
 
         {/* CENTER: Basket + Team */}
+        {/* CENTER: Basket (with integrated intelligence) */}
         <div>
-          <DroppableBasketArea positions={positions} onRemove={handleRemoveFromBasket} onWeightChange={handleWeightChange} onTrim={handleTrim} loadingBasket={loadingBasket} isDraggingFromFeed={dragSource === 'feed'} signals={signals} onPositionClick={setSelectedPosition} />
+          <DroppableBasketArea positions={positions} onRemove={handleRemoveFromBasket} onWeightChange={handleWeightChange} onTrim={handleTrim} loadingBasket={loadingBasket} isDraggingFromFeed={dragSource === 'feed'} signals={signals} onPositionClick={setSelectedPosition} analytics={analytics} />
           {dragSource === 'basket' && <RemoveDropZone />}
-          {/* Ask the team */}
-          <div className="mt-3">
-            <AskAgent
-              subjectType="basket"
-              placeholder="Ask about your basket..."
-              suggestions={['Is my basket too concentrated?', 'Should I trim anything?', 'What looks strongest right now?']}
-            />
-          </div>
         </div>
 
-        {/* RIGHT: Analytics + Brief */}
-        <div className="space-y-4">
-          <AnalyticsPanel analytics={analytics} loading={loadingAnalytics} />
+        {/* RIGHT: Agent Zone */}
+        <div className="space-y-3">
+          {/* Ask the team */}
+          <AskAgent
+            subjectType="basket"
+            placeholder="Ask Mark, Nia, or Rex..."
+            suggestions={['What looks strongest right now?', 'Is my basket balanced?', 'Should I trim anything?']}
+          />
+          {/* Agent briefs */}
           <DailyBrief
             positions={positions}
             analytics={analytics}
@@ -803,9 +801,9 @@ function FlippableCard({
 
 // ─── Droppable Basket Area ───
 function DroppableBasketArea({
-  positions, onRemove, onWeightChange, onTrim, loadingBasket, isDraggingFromFeed, signals, onPositionClick,
+  positions, onRemove, onWeightChange, onTrim, loadingBasket, isDraggingFromFeed, signals, onPositionClick, analytics,
 }: {
-  positions: BasketPosition[]; onRemove: (t: string) => void; onWeightChange: (t: string, w: number) => void; onTrim: (t: string) => void; loadingBasket: boolean; isDraggingFromFeed: boolean; signals: PositionSignal[]; onPositionClick?: (ticker: string) => void;
+  positions: BasketPosition[]; onRemove: (t: string) => void; onWeightChange: (t: string, w: number) => void; onTrim: (t: string) => void; loadingBasket: boolean; isDraggingFromFeed: boolean; signals: PositionSignal[]; onPositionClick?: (ticker: string) => void; analytics?: BasketAnalytics | null;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: 'basket-drop' });
   return (
@@ -819,7 +817,7 @@ function DroppableBasketArea({
           </div>
         </div>
       ) : (
-        <BasketPanel positions={positions} onRemove={onRemove} onWeightChange={onWeightChange} onTrim={onTrim} isOver={isOver && isDraggingFromFeed} signals={signals} onPositionClick={onPositionClick} />
+        <BasketPanel positions={positions} onRemove={onRemove} onWeightChange={onWeightChange} onTrim={onTrim} isOver={isOver && isDraggingFromFeed} signals={signals} onPositionClick={onPositionClick} analytics={analytics} />
       )}
     </div>
   );

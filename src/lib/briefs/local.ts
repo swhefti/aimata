@@ -30,14 +30,11 @@ export function generateLocalBrief(
   // ─── Mark: Market scan summary ───
   sections.push(buildMarkSection(opportunities));
 
-  // ─── Paul: Basket health ───
-  sections.push(buildPaulSection(positions, analytics));
+  // ─── Rex: Basket health + Action items (absorbed Paul's role) ───
+  sections.push(buildRexSection(positions, signals, analytics));
 
-  // ─── Nia: Sentiment & catalysts ───
+  // ─── Nia: News & catalysts ───
   sections.push(buildNiaSection(opportunities, positions));
-
-  // ─── Rex: Action items ───
-  sections.push(buildRexSection(positions, signals));
 
   // Build summary
   const summary = buildSummary(positions, analytics, opportunities, signals);
@@ -187,14 +184,38 @@ function buildNiaSection(opportunities: OpportunityScore[], positions: BasketPos
 
 // ─── Rex ───
 
-function buildRexSection(positions: BasketPosition[], signals: PositionSignal[]): BriefSection {
+function buildRexSection(positions: BasketPosition[], signals: PositionSignal[], analytics: BasketAnalytics | null): BriefSection {
   const lines: string[] = [];
 
   if (positions.length === 0) {
     lines.push('No positions to manage. Once you build the basket, I\'ll tell you exactly what needs attention.');
-    return { agent: 'Rex', title: 'Action Items', lines };
+    return { agent: 'Rex', title: 'Basket & Actions', lines };
   }
 
+  // Basket health (absorbed from Paul)
+  const totalPnl = positions.reduce((s, p) => s + p.pnl, 0);
+  const totalCost = positions.reduce((s, p) => s + p.entry_price * p.quantity, 0);
+  const totalPnlPct = totalCost > 0 ? ((positions.reduce((s, p) => s + p.current_price * p.quantity, 0) - totalCost) / totalCost) * 100 : 0;
+
+  if (totalPnl >= 0) {
+    lines.push(`Basket is **up ${totalPnlPct.toFixed(1)}%**. ${totalPnlPct > 10 ? 'Strong run — don\'t get complacent.' : 'Stay disciplined.'}`);
+  } else {
+    lines.push(`Basket is **down ${Math.abs(totalPnlPct).toFixed(1)}%**. ${totalPnlPct < -10 ? 'This needs attention — review each position.' : 'Minor drawdown. Hold if setups are intact.'}`);
+  }
+
+  if (analytics) {
+    if (analytics.concentration_risk === 'Critical' || analytics.concentration_risk === 'High') {
+      lines.push(`⚠️ Concentration is **${analytics.concentration_risk.toLowerCase()}** — ${analytics.largest_position_ticker} at ${analytics.largest_position_pct.toFixed(0)}%.`);
+    }
+    if (analytics.correlation_risk === 'High') {
+      lines.push(`⚠️ High correlation — positions move together. Sector pullback hits the whole basket.`);
+    }
+    if (analytics.crypto_allocation > 30) {
+      lines.push(`Crypto at ${analytics.crypto_allocation.toFixed(0)}% — above the 30% guardrail.`);
+    }
+  }
+
+  // Action items
   const exits = signals.filter((s) => s.action === 'Exit');
   const profits = signals.filter((s) => s.action === 'Take Profit');
   const trims = signals.filter((s) => s.action === 'Trim');
@@ -202,44 +223,31 @@ function buildRexSection(positions: BasketPosition[], signals: PositionSignal[])
   const holds = signals.filter((s) => s.action === 'Hold');
   const adds = signals.filter((s) => s.action === 'Add' || s.action === 'Strong Buy');
 
-  // Urgent first
   if (exits.length > 0) {
-    for (const e of exits) {
-      lines.push(`🚪 **EXIT ${e.ticker}** — ${e.reason}`);
-    }
+    for (const e of exits) lines.push(`🚪 **EXIT ${e.ticker}** — ${e.reason}`);
   }
-
   if (profits.length > 0) {
-    for (const p of profits) {
-      lines.push(`💰 **TAKE PROFIT on ${p.ticker}** — ${p.reason}`);
-    }
+    for (const p of profits) lines.push(`💰 **TAKE PROFIT on ${p.ticker}** — ${p.reason}`);
   }
-
   if (trims.length > 0) {
-    for (const t of trims) {
-      lines.push(`✂️ **TRIM ${t.ticker}** — ${t.reason}`);
-    }
+    for (const t of trims) lines.push(`✂️ **TRIM ${t.ticker}** — ${t.reason}`);
   }
-
   if (watches.length > 0) {
-    lines.push(`👀 Watching: **${watches.map((w) => w.ticker).join(', ')}** — setups weakening but not broken yet.`);
+    lines.push(`👀 Watching: **${watches.map((w) => w.ticker).join(', ')}** — weakening but not broken.`);
   }
-
   if (adds.length > 0) {
-    lines.push(`➕ Could add to: **${adds.map((a) => a.ticker).join(', ')}** — scores are strong and setups are intact.`);
+    lines.push(`➕ Could add to: **${adds.map((a) => a.ticker).join(', ')}** — scores are strong.`);
   }
-
   if (holds.length > 0 && exits.length === 0 && profits.length === 0 && trims.length === 0) {
-    lines.push(`All ${holds.length} positions are in hold territory. Nothing urgent — stay disciplined and let the setups play out.`);
+    lines.push(`All ${holds.length} positions in hold territory. Stay disciplined.`);
   }
 
-  // Summary action count
   const actionCount = exits.length + profits.length + trims.length;
   if (actionCount > 0) {
-    lines.push(`**${actionCount} action${actionCount > 1 ? 's' : ''} needed today.** Don't ignore these.`);
+    lines.push(`**${actionCount} action${actionCount > 1 ? 's' : ''} needed.** Don't ignore these.`);
   }
 
-  return { agent: 'Rex', title: 'Action Items', lines };
+  return { agent: 'Rex', title: 'Basket & Actions', lines };
 }
 
 // ─── Summary ───

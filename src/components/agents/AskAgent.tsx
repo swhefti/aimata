@@ -133,7 +133,7 @@ export default function AskAgent({
         className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-mata-text-secondary bg-mata-surface hover:bg-mata-border border border-mata-border transition-all"
       >
         <div className="flex -space-x-1">
-          {(['Mark', 'Nia', 'Paul', 'Rex'] as const).map((a) => (
+          {(['Mark', 'Nia', 'Rex'] as const).map((a) => (
             <div key={a} className="ring-1 ring-mata-surface rounded-full">
               <AgentAvatar agentName={a} size="xs" />
             </div>

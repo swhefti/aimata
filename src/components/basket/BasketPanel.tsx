@@ -4,8 +4,9 @@ import { useState } from 'react';
 import AgentAvatar from '@/components/ui/AgentAvatar';
 import AnimatedNumber from '@/components/ui/AnimatedNumber';
 import Sparkline from '@/components/ui/Sparkline';
+import DonutChart from '@/components/ui/DonutChart';
 import ExplainDrawer from '@/components/agents/ExplainDrawer';
-import type { BasketPosition } from '@/types';
+import type { BasketPosition, BasketAnalytics } from '@/types';
 import { type PositionSignal, getActionStyle } from '@/lib/scoring/actions';
 
 interface BasketPanelProps {
@@ -17,6 +18,7 @@ interface BasketPanelProps {
   priceHistories?: Record<string, number[]>;
   signals?: PositionSignal[];
   onPositionClick?: (ticker: string) => void;
+  analytics?: BasketAnalytics | null;
 }
 
 export default function BasketPanel({
@@ -28,7 +30,9 @@ export default function BasketPanel({
   priceHistories,
   signals,
   onPositionClick,
+  analytics,
 }: BasketPanelProps) {
+  const [showIntel, setShowIntel] = useState(false);
   const totalWeight = positions.reduce(
     (sum, p) => sum + (p.manual_weight ?? p.target_weight),
     0
@@ -117,6 +121,67 @@ export default function BasketPanel({
               }
             </p>
           </div>
+        </div>
+      )}
+
+      {/* ─── Donut + Collapsible Intelligence ─── */}
+      {positions.length > 0 && (
+        <div className="mx-3 mb-2">
+          {/* Donut chart */}
+          <div className="flex justify-center py-2">
+            <DonutChart
+              segments={positions.map((p, i) => ({
+                label: p.ticker,
+                value: p.manual_weight ?? p.target_weight,
+                color: ['#ff6b2b', '#3b82f6', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899'][i % 8],
+              }))}
+              size={100}
+              strokeWidth={16}
+            />
+          </div>
+
+          {/* Collapsible basket intelligence */}
+          <button
+            onClick={() => setShowIntel(!showIntel)}
+            className="w-full flex items-center justify-between px-2 py-1.5 text-[9px] font-bold text-mata-text-muted hover:text-mata-text transition-colors"
+          >
+            <span className="uppercase tracking-wider">
+              Basket Intelligence
+              {analytics && <span className="ml-1 text-mata-text-secondary">({analytics.basket_quality} · {analytics.probability_score}/100)</span>}
+            </span>
+            <span>{showIntel ? '▾' : '▸'}</span>
+          </button>
+
+          {showIntel && analytics && (
+            <div className="rounded-lg bg-mata-surface/50 border border-mata-border/50 px-3 py-2 mb-2 animate-[slideInUp_0.15s_ease-out]">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[9px]">
+                <div>
+                  <span className="text-mata-text-muted">Upside:</span>{' '}
+                  <span className="font-bold text-mata-green">{analytics.expected_upside_min.toFixed(1)}% – {analytics.expected_upside_max.toFixed(1)}%</span>
+                </div>
+                <div>
+                  <span className="text-mata-text-muted">Downside:</span>{' '}
+                  <span className="font-bold text-mata-red">-{analytics.downside_risk.toFixed(1)}%</span>
+                </div>
+                <div>
+                  <span className="text-mata-text-muted">Concentration:</span>{' '}
+                  <span className={`font-bold ${analytics.concentration_risk === 'Low' ? 'text-mata-green' : analytics.concentration_risk === 'High' || analytics.concentration_risk === 'Critical' ? 'text-mata-red' : 'text-mata-yellow'}`}>{analytics.concentration_risk}</span>
+                </div>
+                <div>
+                  <span className="text-mata-text-muted">Correlation:</span>{' '}
+                  <span className={`font-bold ${analytics.correlation_risk === 'Low' ? 'text-mata-green' : analytics.correlation_risk === 'High' ? 'text-mata-red' : 'text-mata-yellow'}`}>{analytics.correlation_risk}</span>
+                </div>
+                <div>
+                  <span className="text-mata-text-muted">Crypto:</span>{' '}
+                  <span className={`font-bold ${analytics.crypto_allocation > 30 ? 'text-mata-red' : 'text-mata-text'}`}>{analytics.crypto_allocation.toFixed(0)}%</span>
+                </div>
+                <div>
+                  <span className="text-mata-text-muted">Largest:</span>{' '}
+                  <span className="font-bold text-mata-text">{analytics.largest_position_ticker} {analytics.largest_position_pct.toFixed(0)}%</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

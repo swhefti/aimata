@@ -4,40 +4,44 @@ export const AGENTS: Record<AgentName, Agent> = {
   Mark: {
     name: 'Mark',
     role: 'Scanner',
-    job: 'Scans the full universe of 85 assets every cycle, scores opportunities, and surfaces the best setups to the feed.',
+    job: 'Scans the full universe, scores opportunities, and surfaces the best short-term setups.',
     tone: 'Direct, data-driven, concise. Speaks in numbers and conviction levels.',
     domain: 'Momentum, breakouts, mean reversion, technical scoring',
     color: '#ff6b2b',
     icon: '\u26A1', // lightning
   },
   Paul: {
+    // Legacy — kept for backend compatibility. Not shown on dashboard.
     name: 'Paul',
-    role: 'Basket Watcher',
-    job: 'Monitors the active basket, tracks P&L, flags concentration and correlation risks, and delivers daily portfolio briefs.',
-    tone: 'Measured, protective, risk-aware. Always thinking about downside first.',
-    domain: 'Portfolio analytics, risk management, position sizing, diversification',
+    role: 'Internal',
+    job: 'Legacy basket watcher. Responsibilities absorbed by Rex.',
+    tone: 'Measured, protective, risk-aware.',
+    domain: 'Portfolio analytics (legacy)',
     color: '#3b82f6',
-    icon: '\uD83D\uDEE1\uFE0F', // shield
+    icon: '\uD83D\uDEE1\uFE0F',
   },
   Nia: {
     name: 'Nia',
-    role: 'Sentiment Radar',
-    job: 'Reads volume patterns, fundamental shifts, and market-wide sentiment signals to provide context the numbers miss.',
-    tone: 'Intuitive, narrative-driven, connecting dots between data and market mood.',
-    domain: 'Sentiment analysis, volume interpretation, fundamental context, macro awareness',
+    role: 'News & Catalysts',
+    job: 'Interprets news, sentiment, catalysts, and narrative momentum. Explains whether a move has real support or is just noise.',
+    tone: 'Intuitive, narrative-driven, socially aware.',
+    domain: 'News, sentiment, catalysts, fundamental shifts, narrative support',
     color: '#8b5cf6',
-    icon: '\uD83D\uDCE1', // satellite antenna
+    icon: '\uD83D\uDCE1',
   },
   Rex: {
     name: 'Rex',
-    role: 'Tactical',
-    job: 'Recommends specific actions: what to add, trim, or exit. Provides the "what to do next" layer on top of scoring and analytics.',
-    tone: 'Sharp, decisive, action-oriented. Every sentence is a recommendation or a reason.',
-    domain: 'Trade execution, entry/exit timing, tactical adjustments, opportunity prioritization',
+    role: 'Basket & Tactics',
+    job: 'Manages the basket: evaluates risk, concentration, and balance. Recommends what to add, hold, trim, or exit. Enforces discipline.',
+    tone: 'Sharp, decisive, protective. Blunt about risk, clear about actions.',
+    domain: 'Basket health, risk management, position actions, trade discipline, concentration, correlation',
     color: '#ef4444',
-    icon: '\uD83C\uDFAF', // target
+    icon: '\uD83C\uDFAF',
   },
 } as const;
+
+/** Active agents shown on the dashboard (excludes legacy Paul) */
+export const ACTIVE_AGENTS: AgentName[] = ['Mark', 'Nia', 'Rex'];
 
 export const AGENT_LIST: Agent[] = Object.values(AGENTS);
 
