@@ -18,8 +18,15 @@ import type { BasketPosition, OpportunityScore } from '@/types';
 export async function buildCommitteeContext(
   userId: string,
   subjectType: string,
+  subjectId?: string | null,
 ): Promise<string> {
   const sections: string[] = [];
+
+  // If a specific ticker is the subject, include its detail first
+  if (subjectType === 'ticker' && subjectId) {
+    const tickerCtx = await buildTickerContext(subjectId);
+    sections.push(tickerCtx);
+  }
 
   // ─── Market / Opportunity Feed ───
   const feed = await trader.getOpportunityFeed();
@@ -81,6 +88,39 @@ ${nonHoldActions.map(a =>
   } else {
     sections.push(`## Recommended Actions
 All positions in hold territory. No urgent actions.`);
+  }
+
+  return sections.join('\n\n');
+}
+
+/**
+ * Build context for a general market question.
+ * Uses opportunity feed + basket overview if available.
+ */
+export async function buildMarketContext(userId: string): Promise<string> {
+  const feed = await trader.getOpportunityFeed();
+  const hotNow = feed.filter(o => o.opportunity_label === 'Hot Now');
+  const swings = feed.filter(o => o.opportunity_label === 'Swing');
+  const runs = feed.filter(o => o.opportunity_label === 'Run');
+
+  const sections: string[] = [];
+
+  sections.push(`## Market Overview
+${feed.length} opportunities scored: ${hotNow.length} Hot Now, ${swings.length} Swing, ${runs.length} Run
+Top 5 by score:
+${feed.slice(0, 5).map(o =>
+    `  ${o.ticker} (${o.asset_name}): ${o.opportunity_score}/100, ${o.opportunity_label}, ${o.setup_type}, ${o.risk_label} risk`
+  ).join('\n')}`);
+
+  // Include basket if user has one
+  const { positions } = await trader.getUserBasket(userId);
+  if (positions.length > 0) {
+    const totalValue = positions.reduce((s: number, p: BasketPosition) => s + p.current_price * p.quantity, 0);
+    const totalCost = positions.reduce((s: number, p: BasketPosition) => s + p.entry_price * p.quantity, 0);
+    const totalPnlPct = totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : 0;
+
+    sections.push(`## Your Basket
+${positions.length} positions | Value: $${totalValue.toFixed(0)} | Return: ${totalPnlPct >= 0 ? '+' : ''}${totalPnlPct.toFixed(1)}%`);
   }
 
   return sections.join('\n\n');

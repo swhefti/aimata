@@ -117,11 +117,11 @@ function OverviewTab() {
   if (!data) return <EmptyState message="No overview data available." />;
 
   const cards = [
-    { title: 'Scanner Runs', main: data.scannerRuns?.total ?? 0, sub: `Today: ${data.scannerRuns?.today ?? 0} | Last: ${data.scannerRuns?.lastRunTime ?? 'N/A'}` },
-    { title: 'Graph Runs', main: data.graphRuns?.total ?? 0, sub: `Today: ${data.graphRuns?.today ?? 0} | Failed: ${data.graphRuns?.failed ?? 0} | Avg: ${data.graphRuns?.avgLatency ?? 0}ms` },
+    { title: 'Scanner Runs', main: data.scannerRuns?.total ?? 0, sub: `Today: ${data.scannerRuns?.today ?? 0} | Last: ${data.scannerRuns?.lastRunAt ?? 'N/A'}` },
+    { title: 'Graph Runs', main: data.graphRuns?.total ?? 0, sub: `Today: ${data.graphRuns?.today ?? 0} | Failed: ${data.graphRuns?.failed ?? 0} | Avg: ${data.graphRuns?.avgLatencyMs ?? 0}ms` },
     { title: 'Agent Calls', main: data.agentCalls?.total ?? 0, sub: `Today: ${data.agentCalls?.today ?? 0} | Tokens: ${(data.agentCalls?.totalTokens ?? 0).toLocaleString()} | $${(data.agentCalls?.estimatedCost ?? 0).toFixed(2)}` },
-    { title: 'Active Users', main: data.activeUsers?.count ?? 0, sub: '' },
-    { title: 'Feed Size', main: data.feedSize?.count ?? 0, sub: '' },
+    { title: 'Active Users', main: data.activeUsers ?? 0, sub: '' },
+    { title: 'Feed Size', main: data.feedSize ?? 0, sub: '' },
     { title: 'Errors', main: data.errors?.total ?? 0, sub: `Today: ${data.errors?.today ?? 0}` },
   ];
 
@@ -208,10 +208,10 @@ function RunsTab() {
                             {nodeRuns[id].map((nr: Record<string, unknown>, i: number) => (
                               <tr key={i}>
                                 <td className="py-2 text-mata-text font-medium">{String(nr.node_name ?? nr.name ?? '')}</td>
-                                <td className={`py-2 font-semibold ${AGENT_COLORS[String(nr.agent ?? '')] ?? 'text-mata-text-secondary'}`}>{String(nr.agent ?? '')}</td>
+                                <td className={`py-2 font-semibold ${AGENT_COLORS[String(nr.agent_name ?? nr.agent ?? '')] ?? 'text-mata-text-secondary'}`}>{String(nr.agent_name ?? nr.agent ?? '')}</td>
                                 <td className="py-2"><StatusBadge status={String(nr.status ?? 'pending')} /></td>
-                                <td className="py-2 text-mata-text-muted max-w-[200px] truncate">{String(nr.output ?? '').slice(0, 100)}</td>
-                                <td className="py-2 text-mata-text-muted">{Number(nr.tokens ?? 0).toLocaleString()}</td>
+                                <td className="py-2 text-mata-text-muted max-w-[200px] truncate">{String(nr.output_text ?? nr.output ?? '').slice(0, 100)}</td>
+                                <td className="py-2 text-mata-text-muted">{Number(nr.tokens_used ?? nr.tokens ?? 0).toLocaleString()}</td>
                                 <td className="py-2 text-mata-text-muted">{Number(nr.latency ?? nr.latency_ms ?? 0)}ms</td>
                                 <td className="py-2 text-red-400">{String(nr.error ?? '')}</td>
                               </tr>
@@ -256,10 +256,10 @@ function AgentsTab() {
           {data.map((a: Record<string, unknown>) => (
             <tr key={String(a.agent ?? a.name ?? '')} className="hover:bg-mata-surface/30 transition-colors">
               <td className={`px-4 py-3 font-bold ${AGENT_COLORS[String(a.agent ?? a.name ?? '')] ?? 'text-mata-text'}`}>{String(a.agent ?? a.name ?? '')}</td>
-              <td className="px-4 py-3 text-mata-text">{Number(a.calls ?? a.total_calls ?? 0).toLocaleString()}</td>
-              <td className="px-4 py-3 text-mata-text-muted">{Number(a.tokens ?? a.total_tokens ?? 0).toLocaleString()}</td>
+              <td className="px-4 py-3 text-mata-text">{Number(a.callCount ?? a.calls ?? 0).toLocaleString()}</td>
+              <td className="px-4 py-3 text-mata-text-muted">{Number(a.totalTokens ?? a.tokens ?? 0).toLocaleString()}</td>
               <td className="px-4 py-3 text-mata-text-muted">{Number(a.avg_latency ?? a.avgLatency ?? 0)}ms</td>
-              <td className="px-4 py-3 text-red-400">{Number(a.failures ?? 0)}</td>
+              <td className="px-4 py-3 text-red-400">{Number(a.failureCount ?? a.failures ?? 0)}</td>
               <td className="px-4 py-3 text-mata-text">${Number(a.estimated_cost ?? a.estimatedCost ?? 0).toFixed(2)}</td>
             </tr>
           ))}

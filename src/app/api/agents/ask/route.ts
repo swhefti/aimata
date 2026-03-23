@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUser, AuthError } from '@/server/db';
 import { askWithRouting } from '@/server/graphs/router';
-import { buildTickerContext, buildBasketContext, buildActionContext } from '@/server/graphs/context';
+import { buildTickerContext, buildBasketContext, buildActionContext, buildMarketContext } from '@/server/graphs/context';
 
 /**
  * POST /api/agents/ask
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
           contextSummary = subjectId ? await buildActionContext(user.id, subjectId) : await buildBasketContext(user.id);
           break;
         default:
-          contextSummary = 'General market question.';
+          contextSummary = await buildMarketContext(user.id);
       }
     }
 

@@ -56,7 +56,7 @@ async function callAgent(
   const startTime = Date.now();
 
   try {
-    const anthropic = new Anthropic();
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: maxTokens,

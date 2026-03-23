@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     const subjectId = body.subjectId ?? null;
 
     // Build deterministic context from existing data
-    const contextSummary = await buildCommitteeContext(user.id, subjectType);
+    const contextSummary = await buildCommitteeContext(user.id, subjectType, subjectId);
 
     // Run the committee graph
     const result = await runCommitteeSynthesis(
