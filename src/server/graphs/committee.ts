@@ -68,6 +68,7 @@ function createSpecialistNode(agentName: AgentName) {
         model: 'claude-sonnet-4-20250514',
         maxTokens: 512,
         temperature: 0.3,
+        anthropicApiKey: process.env.ANTHROPIC_API_KEY,
       });
 
       const response = await model.invoke([
@@ -159,6 +160,7 @@ async function synthesizeNode(state: CommitteeStateType): Promise<Partial<Commit
       model: 'claude-sonnet-4-20250514',
       maxTokens: 768,
       temperature: 0.2,
+      anthropicApiKey: process.env.ANTHROPIC_API_KEY,
     });
 
     const response = await model.invoke([

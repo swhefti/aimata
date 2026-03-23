@@ -57,6 +57,7 @@ async function routeNode(state: RouterStateType): Promise<Partial<RouterStateTyp
       model: 'claude-haiku-3-5-20241022',
       maxTokens: 128,
       temperature: 0,
+      anthropicApiKey: process.env.ANTHROPIC_API_KEY,
     });
 
     const response = await model.invoke([
@@ -163,6 +164,7 @@ async function specialistNode(state: RouterStateType): Promise<Partial<RouterSta
       model: 'claude-sonnet-4-20250514',
       maxTokens: 512,
       temperature: 0.3,
+      anthropicApiKey: process.env.ANTHROPIC_API_KEY,
     });
 
     const response = await model.invoke([
@@ -231,6 +233,21 @@ async function specialistNode(state: RouterStateType): Promise<Partial<RouterSta
         status: 'failed',
         error_message: err instanceof Error ? err.message : 'Unknown',
         latency_ms: latencyMs,
+      });
+    } catch { /* non-critical */ }
+
+    // Persist the fallback assistant message so the thread isn't left empty
+    try {
+      await db.schema('trader').from('agent_messages').insert({
+        thread_id: state.threadId,
+        role: 'assistant',
+        agent_name: agent,
+        content: fallback,
+        structured_output: null,
+        tokens_used: 0,
+        latency_ms: latencyMs,
+        prompt_key: `${agent.toLowerCase()}.routed.fallback@${PROMPT_VERSION}`,
+        model: 'fallback',
       });
     } catch { /* non-critical */ }
 

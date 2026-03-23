@@ -46,11 +46,19 @@ export async function getOpsOverview(): Promise<OpsOverview> {
     ? latencyData.reduce((s: number, r: { total_latency_ms: number }) => s + r.total_latency_ms, 0) / latencyData.length
     : 0;
 
-  // Agent calls (from raw_llm_outputs)
-  const { count: llmTotal } = await db.schema('trader').from('raw_llm_outputs').select('*', { count: 'exact', head: true });
-  const { count: llmToday } = await db.schema('trader').from('raw_llm_outputs').select('*', { count: 'exact', head: true }).gte('created_at', today);
-  const { data: tokenData } = await db.schema('trader').from('raw_llm_outputs').select('tokens_used');
-  const totalTokens = (tokenData ?? []).reduce((s: number, r: { tokens_used: number | null }) => s + (r.tokens_used ?? 0), 0);
+  // Agent calls — primary source is node_runs (LangGraph), supplemented by raw_llm_outputs (direct calls)
+  const { count: nodeRunTotal } = await db.schema('trader').from('node_runs').select('*', { count: 'exact', head: true });
+  const { count: nodeRunToday } = await db.schema('trader').from('node_runs').select('*', { count: 'exact', head: true }).gte('created_at', today);
+  const { data: nodeTokenData } = await db.schema('trader').from('node_runs').select('tokens_used');
+  const nodeTokens = (nodeTokenData ?? []).reduce((s: number, r: { tokens_used: number | null }) => s + (r.tokens_used ?? 0), 0);
+
+  // Also count direct agent calls from raw_llm_outputs (non-graph calls)
+  const { count: directLlmCount } = await db.schema('trader').from('raw_llm_outputs').select('*', { count: 'exact', head: true });
+  const { data: directTokenData } = await db.schema('trader').from('raw_llm_outputs').select('tokens_used');
+  const directTokens = (directTokenData ?? []).reduce((s: number, r: { tokens_used: number | null }) => s + (r.tokens_used ?? 0), 0);
+
+  const totalAgentCalls = (nodeRunTotal ?? 0) + (directLlmCount ?? 0);
+  const totalTokens = nodeTokens + directTokens;
 
   // Users
   const { count: userCount } = await db.schema('trader').from('baskets').select('*', { count: 'exact', head: true });
@@ -65,7 +73,7 @@ export async function getOpsOverview(): Promise<OpsOverview> {
   return {
     scannerRuns: { total: scannerTotal ?? 0, today: scannerToday ?? 0, lastRunAt: (lastRun?.ran_at as string) ?? null },
     graphRuns: { total: graphTotal ?? 0, today: graphToday ?? 0, failed: graphFailed ?? 0, avgLatencyMs: Math.round(avgLatency) },
-    agentCalls: { total: llmTotal ?? 0, today: llmToday ?? 0, totalTokens, estimatedCost: totalTokens * COST_PER_TOKEN },
+    agentCalls: { total: totalAgentCalls, today: nodeRunToday ?? 0, totalTokens, estimatedCost: totalTokens * COST_PER_TOKEN },
     activeUsers: userCount ?? 0,
     feedSize: feedCount ?? 0,
     errors: { total: errorTotal ?? 0, today: errorToday ?? 0 },
