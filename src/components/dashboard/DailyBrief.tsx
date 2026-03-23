@@ -96,7 +96,7 @@ export default function DailyBrief({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-mata-border px-4 py-3">
         <div className="flex items-center gap-2">
-          <AgentAvatar agentName="Paul" size="sm" />
+          <AgentAvatar agentName="Rex" size="sm" />
           <div>
             <h2 className="text-sm font-black text-mata-text tracking-tight">Daily Brief</h2>
             <p className="text-[9px] text-mata-text-muted">{localBrief.summary}</p>

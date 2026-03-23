@@ -3,7 +3,7 @@
  *
  * LangGraph graph that:
  * 1. Takes a user question + subject context
- * 2. Routes to the most appropriate specialist (Mark/Nia/Paul/Rex)
+ * 2. Routes to the most appropriate specialist (Mark/Nia/Rex)
  * 3. Invokes the specialist with bounded context
  * 4. Persists thread, messages, routing decision, and graph run
  *
@@ -62,22 +62,20 @@ async function routeNode(state: RouterStateType): Promise<Partial<RouterStateTyp
 
     const response = await model.invoke([
       new SystemMessage(
-        `You are a routing classifier for aiMATA, a trading intelligence platform with 4 specialist agents.
+        `You are a routing classifier for aiMATA, a trading intelligence platform with 3 specialist agents.
 
 Agents and their domains:
 - Mark: opportunity setups, scores, momentum, breakouts, timing, technical quality
-- Nia: catalysts, news, sentiment, fundamentals, narrative support, market mood
-- Paul: basket health, concentration, correlation, diversification, portfolio risk, balance
-- Rex: position actions, trim/hold/exit/add decisions, P&L discipline, trade management
+- Nia: news, catalysts, sentiment, fundamentals, narrative support, market mood
+- Rex: basket health, risk, concentration, correlation, portfolio balance, position actions, trim/hold/exit/add, P&L discipline
 
 Given the user's question and the subject context, respond with ONLY a JSON object:
-{"agent":"Mark|Nia|Paul|Rex","reason":"one short sentence why this agent"}
+{"agent":"Mark|Nia|Rex","reason":"one short sentence why this agent"}
 
 Route to the best single specialist. If ambiguous, prefer:
-- Mark for opportunity/ticker questions
-- Paul for basket/portfolio questions
-- Rex for action/trade questions
-- Nia for why/narrative/catalyst questions`
+- Mark for opportunity/ticker/setup questions
+- Rex for basket/portfolio/risk/action questions
+- Nia for news/narrative/catalyst/sentiment questions`
       ),
       new HumanMessage(
         `Subject: ${state.subjectType}${state.subjectId ? ` (${state.subjectId})` : ''}
@@ -95,7 +93,7 @@ Context preview: ${state.contextSummary.substring(0, 300)}`
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
       const agent = parsed.agent as string;
-      const validAgents = ['Mark', 'Nia', 'Paul', 'Rex'];
+      const validAgents = ['Mark', 'Nia', 'Rex'];
       if (validAgents.includes(agent)) {
         // Persist routing node
         try {
@@ -152,13 +150,13 @@ function inferAgentFromContext(subjectType: string, question: string): AgentName
 
   // Keyword-based fallback
   if (q.includes('trim') || q.includes('sell') || q.includes('exit') || q.includes('hold') || q.includes('add more') || q.includes('action')) return 'Rex';
-  if (q.includes('basket') || q.includes('risk') || q.includes('concentrated') || q.includes('diversif')) return 'Paul';
+  if (q.includes('basket') || q.includes('risk') || q.includes('concentrated') || q.includes('diversif')) return 'Rex';
   if (q.includes('news') || q.includes('catalyst') || q.includes('sentiment') || q.includes('why is it moving') || q.includes('narrative')) return 'Nia';
 
   // Subject-type based
   switch (subjectType) {
     case 'ticker': return 'Mark';
-    case 'basket': return 'Paul';
+    case 'basket': return 'Rex';
     case 'recommendation': return 'Rex';
     default: return 'Mark';
   }

@@ -55,74 +55,45 @@ export default function BasketPanel({
       {/* Orange accent top bar */}
       <div className="h-1 rounded-t-2xl bg-gradient-to-r from-mata-orange to-mata-orange-light" />
 
-      {/* Header */}
+      {/* Header — compact: title + P&L + probability */}
       <div className="px-4 pt-3 pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <AgentAvatar agentName="Paul" size="sm" />
-            <h2 className="text-sm font-black text-mata-text tracking-tight">Your Basket</h2>
+            <AgentAvatar agentName="Rex" size="sm" />
+            <div>
+              <h2 className="text-sm font-black text-mata-text tracking-tight">Your Basket</h2>
+              <p className="text-[9px] text-mata-text-muted">
+                {positions.length} position{positions.length !== 1 ? 's' : ''}
+                {totalCost > 0 && ` · $${totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+              </p>
+            </div>
           </div>
           {positions.length > 0 && (
-            <div className="text-[10px] text-mata-text-muted">
-              {positions.length} position{positions.length !== 1 ? 's' : ''}
+            <div className="flex items-center gap-3">
+              {/* Return */}
+              <div className="text-right">
+                <div className="text-sm font-black leading-tight">
+                  <AnimatedNumber value={totalPnlPct} suffix="%" decimals={1} colorize />
+                </div>
+                <div className="text-[8px] text-mata-text-muted">{winners}W / {losers}L</div>
+              </div>
+              {/* 3-month probability */}
+              {analytics && (
+                <div className={`flex flex-col items-center rounded-lg px-2 py-1 ${
+                  analytics.probability_score >= 60 ? 'bg-mata-green/10' : analytics.probability_score >= 40 ? 'bg-mata-yellow/10' : 'bg-mata-red/10'
+                }`}>
+                  <div className={`text-lg font-black leading-tight ${
+                    analytics.probability_score >= 60 ? 'text-mata-green' : analytics.probability_score >= 40 ? 'text-mata-yellow' : 'text-mata-red'
+                  }`}>
+                    {analytics.probability_score}
+                  </div>
+                  <div className="text-[7px] font-semibold text-mata-text-muted">3m prob</div>
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
-
-      {/* ─── Performance Summary Card ─── */}
-      {positions.length > 0 && (
-        <div className="mx-3 mb-3 rounded-xl bg-gradient-to-br from-mata-surface to-mata-bg border border-mata-border p-3">
-          <div className="flex items-center justify-between gap-2">
-            {/* Invested → Value */}
-            <div className="flex-1">
-              <div className="text-[9px] font-semibold text-mata-text-muted uppercase tracking-wider">Current Value</div>
-              <div className="text-lg font-black text-mata-text leading-tight">
-                <AnimatedNumber value={totalValue} prefix="$" decimals={0} />
-              </div>
-              <div className="text-[9px] text-mata-text-muted mt-0.5">
-                Invested: ${totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-              </div>
-            </div>
-
-            {/* P&L */}
-            <div className="text-right">
-              <div className="text-[9px] font-semibold text-mata-text-muted uppercase tracking-wider">Return</div>
-              <div className="text-lg font-black leading-tight">
-                <AnimatedNumber value={totalPnlPct} suffix="%" decimals={2} colorize />
-              </div>
-              <div className="text-[10px] font-bold">
-                <AnimatedNumber value={totalPnl} prefix="$" decimals={2} colorize />
-              </div>
-            </div>
-
-            {/* Win/Loss */}
-            <div className="text-center">
-              <div className="text-[9px] font-semibold text-mata-text-muted uppercase tracking-wider">W / L</div>
-              <div className="flex items-center gap-1 mt-0.5">
-                <span className="text-sm font-black text-mata-green">{winners}</span>
-                <span className="text-[10px] text-mata-text-muted">/</span>
-                <span className="text-sm font-black text-mata-red">{losers}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Paul's one-liner based on state */}
-          <div className="mt-2 pt-2 border-t border-mata-border/50">
-            <p className="text-[10px] text-mata-text-secondary italic leading-snug">
-              <span className="not-italic font-black text-blue-500">P:</span>{' '}
-              {totalPnlPct > 5
-                ? 'Basket is performing. Don\'t get greedy — check Rex\'s signals.'
-                : totalPnlPct < -5
-                ? 'Basket is hurting. Review each position — cut what isn\'t working.'
-                : positions.length === 1
-                ? 'Single position = single point of failure. Add more to diversify.'
-                : 'Basket is steady. Keep monitoring and follow the plan.'
-              }
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* ─── Donut + Collapsible Intelligence ─── */}
       {positions.length > 0 && (

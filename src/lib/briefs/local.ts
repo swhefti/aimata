@@ -90,60 +90,6 @@ function buildMarkSection(opportunities: OpportunityScore[]): BriefSection {
   return { agent: 'Mark', title: 'Scanner Report', lines };
 }
 
-// ─── Paul ───
-
-function buildPaulSection(positions: BasketPosition[], analytics: BasketAnalytics | null): BriefSection {
-  const lines: string[] = [];
-
-  if (positions.length === 0) {
-    lines.push('Your basket is empty. Start building by dragging opportunities from Mark\'s scanner.');
-    lines.push('A good basket has 5-10 positions across different setups and asset types.');
-    return { agent: 'Paul', title: 'Basket Health', lines };
-  }
-
-  const totalPnl = positions.reduce((s, p) => s + p.pnl, 0);
-  const totalCost = positions.reduce((s, p) => s + p.entry_price * p.quantity, 0);
-  const totalPnlPct = totalCost > 0 ? ((positions.reduce((s, p) => s + p.current_price * p.quantity, 0) - totalCost) / totalCost) * 100 : 0;
-
-  // Overall P&L
-  if (totalPnl >= 0) {
-    lines.push(`Basket is **up ${totalPnlPct.toFixed(1)}%** ($${totalPnl.toFixed(2)}). ${totalPnlPct > 10 ? 'Strong performance — don\'t get complacent.' : 'Positive territory. Keep managing.'}`);
-  } else {
-    lines.push(`Basket is **down ${Math.abs(totalPnlPct).toFixed(1)}%** ($${totalPnl.toFixed(2)}). ${totalPnlPct < -10 ? 'This needs attention. Review each position.' : 'Minor drawdown. Stay patient if setups are intact.'}`);
-  }
-
-  // Winners and losers
-  const winners = positions.filter((p) => p.pnl_pct > 0);
-  const losers = positions.filter((p) => p.pnl_pct < 0);
-  if (winners.length > 0 && losers.length > 0) {
-    const bestWinner = winners.sort((a, b) => b.pnl_pct - a.pnl_pct)[0];
-    const worstLoser = losers.sort((a, b) => a.pnl_pct - b.pnl_pct)[0];
-    lines.push(`Best: **${bestWinner.ticker}** +${bestWinner.pnl_pct.toFixed(1)}%. Worst: **${worstLoser.ticker}** ${worstLoser.pnl_pct.toFixed(1)}%.`);
-  }
-
-  if (analytics) {
-    // Concentration
-    if (analytics.concentration_risk === 'Critical' || analytics.concentration_risk === 'High') {
-      lines.push(`⚠️ Concentration is **${analytics.concentration_risk.toLowerCase()}** — ${analytics.largest_position_ticker} is ${analytics.largest_position_pct.toFixed(0)}% of your basket. That's too much on one name.`);
-    }
-
-    // Correlation
-    if (analytics.correlation_risk === 'High') {
-      lines.push(`⚠️ High correlation — several positions are moving together. A sector pullback would hit the whole basket.`);
-    }
-
-    // Crypto
-    if (analytics.crypto_allocation > 30) {
-      lines.push(`Crypto is ${analytics.crypto_allocation.toFixed(0)}% of the basket. That's above the 30% guardrail. Expect bigger swings.`);
-    }
-
-    // Quality verdict
-    lines.push(`Overall basket quality: **${analytics.basket_quality}**. Probability score: **${analytics.probability_score}/100**.`);
-  }
-
-  return { agent: 'Paul', title: 'Basket Health', lines };
-}
-
 // ─── Nia ───
 
 function buildNiaSection(opportunities: OpportunityScore[], positions: BasketPosition[]): BriefSection {

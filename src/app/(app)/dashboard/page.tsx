@@ -135,7 +135,7 @@ function DraggableCard({ id, children, disabled }: { id: string; children: React
 function FeedSkeleton() {
   return (
     <div className="grid grid-cols-3 gap-2">
-      {Array.from({ length: 9 }).map((_, i) => (
+      {Array.from({ length: 12 }).map((_, i) => (
         <div key={i} className="animate-pulse aspect-square rounded-2xl border border-mata-border bg-mata-card p-3">
           <div className="h-3 w-10 rounded bg-mata-surface mb-2" />
           <div className="h-2 w-16 rounded bg-mata-surface mb-3" />
@@ -446,7 +446,7 @@ export default function DashboardPage() {
 }
 
 // ─── Scanner Feed ───
-const INITIAL_COUNT = 9;
+const INITIAL_COUNT = 12;
 const INCREMENT = 6;
 const MAX_COUNT = 21;
 
