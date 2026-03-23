@@ -3,17 +3,25 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Logo from './Logo';
+import { isAdminEmail } from '@/lib/admin';
+
+interface NavBarProps {
+  userEmail?: string | null;
+}
 
 const NAV_LINKS = [
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/market', label: 'Market' },
-  { href: '/basket', label: 'Basket' },
-  { href: '/settings', label: 'Settings' },
-  { href: '/admin', label: 'Admin' },
+  { href: '/dashboard', label: 'Dashboard', adminOnly: false },
+  { href: '/market', label: 'Market', adminOnly: false },
+  { href: '/basket', label: 'Basket', adminOnly: false },
+  { href: '/settings', label: 'Settings', adminOnly: false },
+  { href: '/admin', label: 'Admin', adminOnly: true },
 ] as const;
 
-export default function NavBar() {
+export default function NavBar({ userEmail }: NavBarProps) {
   const pathname = usePathname();
+  const isAdmin = isAdminEmail(userEmail);
+
+  const visibleLinks = NAV_LINKS.filter((link) => !link.adminOnly || isAdmin);
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-mata-border/60 bg-mata-bg/80 backdrop-blur-xl">
@@ -25,7 +33,7 @@ export default function NavBar() {
 
         {/* Nav Links */}
         <div className="flex items-center gap-1">
-          {NAV_LINKS.map((link) => {
+          {visibleLinks.map((link) => {
             const isActive =
               pathname === link.href || pathname.startsWith(link.href + '/');
             return (
@@ -47,7 +55,7 @@ export default function NavBar() {
         {/* User area */}
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-mata-surface border border-mata-border text-xs font-bold text-mata-text-secondary">
-            U
+            {userEmail ? userEmail[0].toUpperCase() : 'U'}
           </div>
           <button
             className="text-xs font-medium text-mata-text-muted hover:text-mata-red transition-colors"
