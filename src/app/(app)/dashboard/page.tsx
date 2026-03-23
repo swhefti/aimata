@@ -17,9 +17,8 @@ import Sparkline from '@/components/ui/Sparkline';
 import BasketPanel from '@/components/basket/BasketPanel';
 import AnalyticsPanel from '@/components/basket/AnalyticsPanel';
 import DailyBrief from '@/components/dashboard/DailyBrief';
-import AgentStrip from '@/components/dashboard/AgentStrip';
-import BasketNarrative from '@/components/basket/BasketNarrative';
-import CommitteeBrief from '@/components/agents/CommitteeBrief';
+import DashboardSummary from '@/components/dashboard/DashboardSummary';
+import PositionDetail from '@/components/basket/PositionDetail';
 import AskAgent from '@/components/agents/AskAgent';
 import { computePositionActions, type PositionSignal } from '@/lib/scoring/actions';
 import { useToast } from '@/components/ui/Toast';
@@ -166,6 +165,7 @@ export default function DashboardPage() {
   const [flippedTicker, setFlippedTicker] = useState<string | null>(null);
   const [signals, setSignals] = useState<PositionSignal[]>([]);
   const [lastScanned, setLastScanned] = useState<Date | null>(null);
+  const [selectedPosition, setSelectedPosition] = useState<string | null>(null);
 
   const [pendingAdd, setPendingAdd] = useState<{
     ticker: string; assetName: string; price: number; opportunityData: OpportunityWithPrice;
@@ -349,8 +349,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Agent commentary strip */}
-      <AgentStrip opportunities={filteredOpportunities} positions={positions} analytics={analytics} signals={signals} />
+      {/* Status summary strip */}
+      <DashboardSummary positions={positions} analytics={analytics} opportunities={filteredOpportunities} signals={signals} />
 
       {/* 3 equal columns */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
@@ -377,41 +377,50 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* CENTER: Basket */}
+        {/* CENTER: Basket + Team */}
         <div>
-          <DroppableBasketArea positions={positions} onRemove={handleRemoveFromBasket} onWeightChange={handleWeightChange} onTrim={handleTrim} loadingBasket={loadingBasket} isDraggingFromFeed={dragSource === 'feed'} signals={signals} />
+          <DroppableBasketArea positions={positions} onRemove={handleRemoveFromBasket} onWeightChange={handleWeightChange} onTrim={handleTrim} loadingBasket={loadingBasket} isDraggingFromFeed={dragSource === 'feed'} signals={signals} onPositionClick={setSelectedPosition} />
           {dragSource === 'basket' && <RemoveDropZone />}
-          {/* Paul's narrative review */}
-          <div className="mt-3">
-            <BasketNarrative positions={positions} analytics={analytics} />
-          </div>
           {/* Ask the team */}
-          <div className="mt-2">
+          <div className="mt-3">
             <AskAgent
               subjectType="basket"
               placeholder="Ask about your basket..."
               suggestions={['Is my basket too concentrated?', 'Should I trim anything?', 'What looks strongest right now?']}
             />
           </div>
-          <div className="mt-3">
-            <DailyBrief
-              positions={positions}
-              analytics={analytics}
-              opportunities={opportunities}
-              signals={signals}
-              claudeBrief={brief}
-              onRefreshClaude={fetchBrief}
-              claudeLoading={loadingBrief}
-            />
-          </div>
         </div>
 
-        {/* RIGHT: Analytics + Committee */}
+        {/* RIGHT: Analytics + Brief */}
         <div className="space-y-4">
-          <CommitteeBrief />
           <AnalyticsPanel analytics={analytics} loading={loadingAnalytics} />
+          <DailyBrief
+            positions={positions}
+            analytics={analytics}
+            opportunities={opportunities}
+            signals={signals}
+            claudeBrief={brief}
+            onRefreshClaude={fetchBrief}
+            claudeLoading={loadingBrief}
+          />
         </div>
       </div>
+
+      {/* Position detail drawer */}
+      {selectedPosition && (() => {
+        const pos = positions.find(p => p.ticker === selectedPosition);
+        const sig = signals.find(s => s.ticker === selectedPosition) ?? null;
+        if (!pos) return null;
+        return (
+          <PositionDetail
+            position={pos}
+            signal={sig}
+            onClose={() => setSelectedPosition(null)}
+            onRemove={(t) => { handleRemoveFromBasket(t); setSelectedPosition(null); }}
+            onTrim={(t) => { handleTrim(t); setSelectedPosition(null); }}
+          />
+        );
+      })()}
 
       {/* Drag overlay */}
       <DragOverlay>
@@ -578,12 +587,15 @@ function FlippableCard({
     }, 450);
   }
 
-  // Compute column center for the expansion target
+  // Compute column center for the expansion target, clamped to viewport
   const colRect = columnRef.current?.getBoundingClientRect();
-  const targetLeft = colRect ? colRect.left + colRect.width / 2 : (rect ? rect.left + rect.width / 2 : 0);
-  const targetTop = colRect ? colRect.top + Math.min(colRect.height / 2, window.innerHeight / 2) : (typeof window !== 'undefined' ? window.innerHeight / 2 : 400);
-
   const expandedSize = rect ? rect.width * 3.5 : 350;
+  const halfExpanded = expandedSize / 2;
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+  const targetLeft = colRect ? colRect.left + colRect.width / 2 : (rect ? rect.left + rect.width / 2 : 0);
+  const rawTop = colRect ? colRect.top + Math.min(colRect.height / 2, vh / 2) : vh / 2;
+  // Clamp so the card stays within viewport with 20px padding
+  const targetTop = Math.max(halfExpanded + 20, Math.min(rawTop, vh - halfExpanded - 20));
 
   return (
     <>
@@ -764,7 +776,14 @@ function FlippableCard({
                   </div>
 
                   {/* Back footer */}
-                  <div className="px-5 py-2.5 border-t border-mata-border flex justify-end">
+                  <div className="px-5 py-2.5 border-t border-mata-border flex items-center justify-between">
+                    <a
+                      href={`/opportunity/${o.ticker}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-[10px] font-bold text-mata-text-secondary hover:text-mata-orange transition-colors"
+                    >
+                      Full detail →
+                    </a>
                     <button
                       onClick={(e) => { e.stopPropagation(); onAdd(o.ticker); }}
                       className="rounded-lg bg-gradient-to-r from-mata-orange to-mata-orange-dark px-4 py-1.5 text-[10px] font-bold text-white hover:shadow-md hover:shadow-mata-orange/20 transition-all active:scale-[0.97]"
@@ -784,9 +803,9 @@ function FlippableCard({
 
 // ─── Droppable Basket Area ───
 function DroppableBasketArea({
-  positions, onRemove, onWeightChange, onTrim, loadingBasket, isDraggingFromFeed, signals,
+  positions, onRemove, onWeightChange, onTrim, loadingBasket, isDraggingFromFeed, signals, onPositionClick,
 }: {
-  positions: BasketPosition[]; onRemove: (t: string) => void; onWeightChange: (t: string, w: number) => void; onTrim: (t: string) => void; loadingBasket: boolean; isDraggingFromFeed: boolean; signals: PositionSignal[];
+  positions: BasketPosition[]; onRemove: (t: string) => void; onWeightChange: (t: string, w: number) => void; onTrim: (t: string) => void; loadingBasket: boolean; isDraggingFromFeed: boolean; signals: PositionSignal[]; onPositionClick?: (ticker: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: 'basket-drop' });
   return (
@@ -800,7 +819,7 @@ function DroppableBasketArea({
           </div>
         </div>
       ) : (
-        <BasketPanel positions={positions} onRemove={onRemove} onWeightChange={onWeightChange} onTrim={onTrim} isOver={isOver && isDraggingFromFeed} signals={signals} />
+        <BasketPanel positions={positions} onRemove={onRemove} onWeightChange={onWeightChange} onTrim={onTrim} isOver={isOver && isDraggingFromFeed} signals={signals} onPositionClick={onPositionClick} />
       )}
     </div>
   );

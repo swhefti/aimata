@@ -16,6 +16,7 @@ interface BasketPanelProps {
   isOver?: boolean;
   priceHistories?: Record<string, number[]>;
   signals?: PositionSignal[];
+  onPositionClick?: (ticker: string) => void;
 }
 
 export default function BasketPanel({
@@ -26,6 +27,7 @@ export default function BasketPanel({
   isOver,
   priceHistories,
   signals,
+  onPositionClick,
 }: BasketPanelProps) {
   const totalWeight = positions.reduce(
     (sum, p) => sum + (p.manual_weight ?? p.target_weight),
@@ -145,6 +147,7 @@ export default function BasketPanel({
                   onTrim={onTrim}
                   sparkData={priceHistories?.[pos.ticker]}
                   signal={signal}
+                  onClick={onPositionClick}
                 />
               );
             })}
@@ -191,6 +194,7 @@ function BasketPositionRow({
   onTrim,
   sparkData,
   signal,
+  onClick,
 }: {
   position: BasketPosition;
   onRemove: (ticker: string) => void;
@@ -198,6 +202,7 @@ function BasketPositionRow({
   onTrim?: (ticker: string) => void;
   sparkData?: number[];
   signal?: PositionSignal;
+  onClick?: (ticker: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [weightVal, setWeightVal] = useState(
@@ -220,11 +225,15 @@ function BasketPositionRow({
     <div className={`rounded-lg transition-all ${isUrgent ? 'animate-[pulseUrgent_2s_ease-in-out_infinite]' : ''}`}>
       {/* Main row */}
       <div className="group flex items-center gap-1.5 px-2 py-1.5 hover:bg-mata-surface/80 transition-colors rounded-lg">
-        {/* Ticker + name */}
-        <div className="min-w-0 flex-shrink-0 w-14">
-          <div className="text-xs font-black text-mata-text">{p.ticker}</div>
+        {/* Ticker + name — clickable for detail */}
+        <button
+          className="min-w-0 flex-shrink-0 w-14 text-left hover:text-mata-orange transition-colors"
+          onClick={() => onClick?.(p.ticker)}
+          title="View position detail"
+        >
+          <div className="text-xs font-black">{p.ticker}</div>
           <div className="text-[8px] text-mata-text-muted truncate">{p.asset_name}</div>
-        </div>
+        </button>
 
         {/* Sparkline */}
         {sparkData && sparkData.length > 1 && (
