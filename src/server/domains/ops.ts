@@ -205,31 +205,46 @@ export async function getScannerHistory(limit: number = 20) {
   return data ?? [];
 }
 
-// ─── Opportunity Outcome Evaluation ───
+// ─── Opportunity Outcome Evaluation (with summary) ───
 
 export interface OpportunityOutcome {
   ticker: string;
-  scoredAt: string;
+  scored_at: string;
   score: number;
   label: string;
-  riskLabel: string;
-  setupType: string;
-  priceAtScore: number | null;
-  currentPrice: number | null;
-  returnPct: number | null;
+  risk: string;
+  setup: string;
+  price_at_score: number | null;
+  current_price: number | null;
+  return_pct: number | null;
 }
 
-export async function getOpportunityOutcomes(): Promise<OpportunityOutcome[]> {
+interface BucketSummary {
+  label: string;
+  count: number;
+  avgReturn: number | null;
+}
+
+export interface EvaluationResult {
+  rows: OpportunityOutcome[];
+  summary: {
+    byScoreBucket: BucketSummary[];
+    byLabel: BucketSummary[];
+    byRisk: BucketSummary[];
+  };
+}
+
+export async function getOpportunityOutcomes(): Promise<EvaluationResult> {
   const db = getAdminClient();
 
-  // Get the latest scored opportunities
   const { data: scored } = await db.schema('trader').from('opportunity_feed')
     .select('ticker, opportunity_score, opportunity_label, risk_label, setup_type, scored_at')
     .order('opportunity_score', { ascending: false });
 
-  if (!scored || scored.length === 0) return [];
+  if (!scored || scored.length === 0) {
+    return { rows: [], summary: { byScoreBucket: [], byLabel: [], byRisk: [] } };
+  }
 
-  // Get quotes for current prices
   const tickers = scored.map((s: { ticker: string }) => s.ticker);
   const { data: quotes } = await db.from('market_quotes')
     .select('ticker, last_price')
@@ -241,7 +256,6 @@ export async function getOpportunityOutcomes(): Promise<OpportunityOutcome[]> {
     if (!quoteMap.has(q.ticker as string)) quoteMap.set(q.ticker as string, q.last_price as number);
   }
 
-  // Get historical prices near scoring time for return calculation
   const { data: histPrices } = await db.from('price_history')
     .select('ticker, date, close')
     .in('ticker', tickers)
@@ -253,7 +267,8 @@ export async function getOpportunityOutcomes(): Promise<OpportunityOutcome[]> {
     if (!entryMap.has(p.ticker as string)) entryMap.set(p.ticker as string, p.close as number);
   }
 
-  return scored.map((s: Record<string, unknown>) => {
+  // Build rows with frontend-expected field names
+  const rows: OpportunityOutcome[] = scored.map((s: Record<string, unknown>) => {
     const ticker = s.ticker as string;
     const priceAtScore = entryMap.get(ticker) ?? null;
     const currentPrice = quoteMap.get(ticker) ?? null;
@@ -261,26 +276,209 @@ export async function getOpportunityOutcomes(): Promise<OpportunityOutcome[]> {
 
     return {
       ticker,
-      scoredAt: s.scored_at as string,
+      scored_at: s.scored_at as string,
       score: s.opportunity_score as number,
       label: s.opportunity_label as string,
-      riskLabel: s.risk_label as string,
-      setupType: s.setup_type as string,
-      priceAtScore,
-      currentPrice,
-      returnPct,
+      risk: s.risk_label as string,
+      setup: s.setup_type as string,
+      price_at_score: priceAtScore,
+      current_price: currentPrice,
+      return_pct: returnPct,
     };
   });
+
+  // Compute summary
+  function avgReturn(items: OpportunityOutcome[]): number | null {
+    const withReturn = items.filter((r) => r.return_pct !== null);
+    if (withReturn.length === 0) return null;
+    return withReturn.reduce((s, r) => s + r.return_pct!, 0) / withReturn.length;
+  }
+
+  const byScoreBucket: BucketSummary[] = [
+    { label: '≥70', count: 0, avgReturn: null },
+    { label: '50-69', count: 0, avgReturn: null },
+    { label: '<50', count: 0, avgReturn: null },
+  ];
+  const high = rows.filter((r) => r.score >= 70);
+  const mid = rows.filter((r) => r.score >= 50 && r.score < 70);
+  const low = rows.filter((r) => r.score < 50);
+  byScoreBucket[0] = { label: '≥70', count: high.length, avgReturn: avgReturn(high) };
+  byScoreBucket[1] = { label: '50-69', count: mid.length, avgReturn: avgReturn(mid) };
+  byScoreBucket[2] = { label: '<50', count: low.length, avgReturn: avgReturn(low) };
+
+  const labels = ['Hot Now', 'Swing', 'Run'];
+  const byLabel = labels.map((l) => {
+    const items = rows.filter((r) => r.label === l);
+    return { label: l, count: items.length, avgReturn: avgReturn(items) };
+  });
+
+  const risks = ['Low', 'Medium', 'High'];
+  const byRisk = risks.map((r) => {
+    const items = rows.filter((row) => row.risk === r);
+    return { label: r, count: items.length, avgReturn: avgReturn(items) };
+  });
+
+  return { rows, summary: { byScoreBucket, byLabel, byRisk } };
 }
 
-// ─── LLM Output Log ───
+// ─── Unified Activity Feed (graph runs + direct LLM calls) ───
 
-export async function getLlmOutputs(limit: number = 50) {
+export interface ActivityEntry {
+  id: string;
+  source: 'graph_node' | 'direct_llm';
+  timestamp: string;
+  graph_type: string | null;
+  node_name: string | null;
+  agent_name: string | null;
+  prompt_key: string | null;
+  model: string | null;
+  tokens_used: number;
+  latency_ms: number;
+  status: string;
+  output_preview: string | null;
+  error_message: string | null;
+}
+
+export async function getActivityFeed(limit: number = 50): Promise<ActivityEntry[]> {
   const db = getAdminClient();
-  const { data } = await db.schema('trader').from('raw_llm_outputs')
-    .select('*')
+
+  // Get node runs (from LangGraph)
+  const { data: nodeData } = await db.schema('trader').from('node_runs')
+    .select('id, graph_run_id, node_name, agent_name, status, output_text, tokens_used, latency_ms, error_message, created_at')
     .order('created_at', { ascending: false })
     .limit(limit);
 
-  return data ?? [];
+  // Get graph run types for context
+  const graphRunIds = [...new Set((nodeData ?? []).map((n: { graph_run_id: string }) => n.graph_run_id).filter(Boolean))];
+  const graphTypeMap = new Map<string, string>();
+  if (graphRunIds.length > 0) {
+    const { data: runs } = await db.schema('trader').from('graph_runs')
+      .select('id, graph_type')
+      .in('id', graphRunIds);
+    for (const r of runs ?? []) {
+      graphTypeMap.set(r.id as string, r.graph_type as string);
+    }
+  }
+
+  const nodeEntries: ActivityEntry[] = (nodeData ?? []).map((n: Record<string, unknown>) => ({
+    id: n.id as string,
+    source: 'graph_node' as const,
+    timestamp: n.created_at as string,
+    graph_type: graphTypeMap.get(n.graph_run_id as string) ?? null,
+    node_name: n.node_name as string,
+    agent_name: (n.agent_name as string) ?? null,
+    prompt_key: null,
+    model: null,
+    tokens_used: (n.tokens_used as number) ?? 0,
+    latency_ms: (n.latency_ms as number) ?? 0,
+    status: n.status as string,
+    output_preview: n.output_text ? (n.output_text as string).substring(0, 150) : null,
+    error_message: (n.error_message as string) ?? null,
+  }));
+
+  // Get direct LLM calls
+  const { data: llmData } = await db.schema('trader').from('raw_llm_outputs')
+    .select('id, prompt_key, model, tokens_used, duration_ms, output_text, created_at')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  const llmEntries: ActivityEntry[] = (llmData ?? []).map((l: Record<string, unknown>) => ({
+    id: l.id as string,
+    source: 'direct_llm' as const,
+    timestamp: l.created_at as string,
+    graph_type: null,
+    node_name: null,
+    agent_name: null,
+    prompt_key: (l.prompt_key as string) ?? null,
+    model: (l.model as string) ?? null,
+    tokens_used: (l.tokens_used as number) ?? 0,
+    latency_ms: (l.duration_ms as number) ?? 0,
+    status: 'completed',
+    output_preview: l.output_text ? (l.output_text as string).substring(0, 150) : null,
+    error_message: null,
+  }));
+
+  // Merge and sort by timestamp
+  const all = [...nodeEntries, ...llmEntries]
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, limit);
+
+  return all;
+}
+
+// ─── Thread Reader ───
+
+export interface ThreadMessage {
+  id: string;
+  role: string;
+  agent_name: string | null;
+  content: string;
+  structured_output: unknown;
+  tokens_used: number;
+  latency_ms: number;
+  created_at: string;
+}
+
+export interface ThreadWithMessages {
+  id: string;
+  subject_type: string;
+  subject_id: string | null;
+  routed_agent: string | null;
+  routing_reason: string | null;
+  status: string;
+  created_at: string;
+  messages: ThreadMessage[];
+}
+
+export async function getThreadsForSubject(
+  userId: string,
+  subjectType: string,
+  subjectId: string | null,
+  limit: number = 5,
+): Promise<ThreadWithMessages[]> {
+  const db = getAdminClient();
+
+  let query = db.schema('trader').from('agent_threads')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('subject_type', subjectType)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (subjectId) {
+    query = query.eq('subject_id', subjectId);
+  }
+
+  const { data: threads } = await query;
+  if (!threads || threads.length === 0) return [];
+
+  const result: ThreadWithMessages[] = [];
+  for (const t of threads) {
+    const { data: messages } = await db.schema('trader').from('agent_messages')
+      .select('*')
+      .eq('thread_id', t.id)
+      .order('created_at', { ascending: true });
+
+    result.push({
+      id: t.id as string,
+      subject_type: t.subject_type as string,
+      subject_id: (t.subject_id as string) ?? null,
+      routed_agent: (t.routed_agent as string) ?? null,
+      routing_reason: (t.routing_reason as string) ?? null,
+      status: t.status as string,
+      created_at: t.created_at as string,
+      messages: (messages ?? []).map((m: Record<string, unknown>) => ({
+        id: m.id as string,
+        role: m.role as string,
+        agent_name: (m.agent_name as string) ?? null,
+        content: m.content as string,
+        structured_output: m.structured_output ?? null,
+        tokens_used: (m.tokens_used as number) ?? 0,
+        latency_ms: (m.latency_ms as number) ?? 0,
+        created_at: m.created_at as string,
+      })),
+    });
+  }
+
+  return result;
 }

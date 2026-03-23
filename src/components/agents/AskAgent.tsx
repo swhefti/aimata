@@ -1,35 +1,38 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import AgentAvatar from '@/components/ui/AgentAvatar';
 import type { AgentName } from '@/types';
 
 interface AskAgentProps {
-  /** Subject type for context grounding */
   subjectType: 'market' | 'ticker' | 'basket' | 'recommendation';
-  /** Subject id (ticker, basket id, etc.) */
   subjectId?: string;
-  /** Optional pre-built context (if not provided, API builds it) */
   context?: string;
-  /** Placeholder text */
   placeholder?: string;
-  /** Suggested questions */
   suggestions?: string[];
 }
 
-interface RoutedAnswer {
-  routedAgent: AgentName;
-  routingReason: string;
-  answer: string;
-  structured: {
-    stance: string;
-    confidence: number;
-    topDrivers: string[];
-    risks: string[];
+interface ThreadMessage {
+  id: string;
+  role: string;
+  agent_name: string | null;
+  content: string;
+  structured_output: {
+    stance?: string;
+    confidence?: number;
+    topDrivers?: string[];
+    risks?: string[];
   } | null;
-  status: string;
-  tokensUsed: number;
-  latencyMs: number;
+  tokens_used: number;
+  latency_ms: number;
+  created_at: string;
+}
+
+interface ThreadData {
+  id: string;
+  routed_agent: string | null;
+  routing_reason: string | null;
+  messages: ThreadMessage[];
 }
 
 export default function AskAgent({
@@ -42,19 +45,42 @@ export default function AskAgent({
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<RoutedAnswer | null>(null);
+  const [threads, setThreads] = useState<ThreadData[]>([]);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Load thread history when opened
+  const loadThreads = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ subjectType });
+      if (subjectId) params.set('subjectId', subjectId);
+      const res = await fetch(`/api/agents/threads?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setThreads(data.threads ?? []);
+      }
+    } catch { /* silent */ }
+  }, [subjectType, subjectId]);
 
   useEffect(() => {
-    if (open) inputRef.current?.focus();
-  }, [open]);
+    if (open) {
+      inputRef.current?.focus();
+      loadThreads();
+    }
+  }, [open, loadThreads]);
+
+  // Scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [threads]);
 
   async function handleAsk(q?: string) {
     const finalQ = q ?? question;
     if (!finalQ.trim() || loading) return;
     setLoading(true);
-    setResult(null);
     setError(null);
 
     try {
@@ -70,7 +96,9 @@ export default function AskAgent({
       });
 
       if (res.ok) {
-        setResult(await res.json());
+        setQuestion('');
+        // Reload threads to show the new exchange
+        await loadThreads();
       } else {
         const data = await res.json();
         setError(data.error ?? 'Failed to get response');
@@ -90,6 +118,14 @@ export default function AskAgent({
     urgent: 'text-mata-red bg-mata-red/10',
   };
 
+  // Flatten all messages from all threads for display
+  const allMessages: (ThreadMessage & { threadAgent: string | null; threadReason: string | null })[] = [];
+  for (const t of threads) {
+    for (const m of t.messages) {
+      allMessages.push({ ...m, threadAgent: t.routed_agent, threadReason: t.routing_reason });
+    }
+  }
+
   if (!open) {
     return (
       <button
@@ -104,25 +140,56 @@ export default function AskAgent({
           ))}
         </div>
         Ask the team
+        {allMessages.length > 0 && (
+          <span className="ml-1 text-[8px] text-mata-text-muted">({allMessages.length})</span>
+        )}
       </button>
     );
   }
 
   return (
     <div className="rounded-xl border border-mata-border bg-mata-card overflow-hidden animate-[slideInUp_0.2s_ease-out]">
-      {/* Input */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-mata-border">
-        <div className="flex -space-x-1 flex-shrink-0">
-          {result?.routedAgent ? (
-            <AgentAvatar agentName={result.routedAgent} size="xs" />
-          ) : (
-            (['Mark', 'Nia', 'Paul', 'Rex'] as const).map((a) => (
-              <div key={a} className="ring-1 ring-mata-card rounded-full">
-                <AgentAvatar agentName={a} size="xs" />
+      {/* Thread history */}
+      {allMessages.length > 0 && (
+        <div ref={scrollRef} className="max-h-64 overflow-y-auto px-3 py-2 space-y-2 border-b border-mata-border/50">
+          {allMessages.map((m) => (
+            <div key={m.id} className={`flex gap-2 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              {m.role === 'assistant' && m.agent_name && (
+                <div className="flex-shrink-0 mt-0.5">
+                  <AgentAvatar agentName={m.agent_name as AgentName} size="xs" />
+                </div>
+              )}
+              <div className={`max-w-[85%] rounded-lg px-2.5 py-1.5 ${
+                m.role === 'user'
+                  ? 'bg-mata-orange/10 text-mata-text'
+                  : 'bg-mata-surface text-mata-text-secondary'
+              }`}>
+                {m.role === 'assistant' && m.agent_name && (
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="text-[8px] font-black text-mata-text">{m.agent_name}</span>
+                    {m.structured_output?.stance && (
+                      <span className={`text-[7px] font-bold px-1 py-0.5 rounded ${stanceColor[m.structured_output.stance] ?? 'bg-mata-surface'}`}>
+                        {m.structured_output.stance}
+                      </span>
+                    )}
+                    {m.threadReason && (
+                      <span className="text-[7px] text-mata-text-muted italic">{m.threadReason}</span>
+                    )}
+                  </div>
+                )}
+                <p className="text-[10px] leading-snug">{m.content}</p>
+                <div className="text-[7px] text-mata-text-muted mt-0.5">
+                  {new Date(m.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                  {m.role === 'assistant' && m.tokens_used > 0 && ` · ${m.tokens_used} tok`}
+                </div>
               </div>
-            ))
-          )}
+            </div>
+          ))}
         </div>
+      )}
+
+      {/* Input */}
+      <div className="flex items-center gap-2 px-3 py-2">
         <input
           ref={inputRef}
           type="text"
@@ -139,12 +206,12 @@ export default function AskAgent({
         >
           {loading ? '...' : 'Ask'}
         </button>
-        <button onClick={() => { setOpen(false); setResult(null); setError(null); }} className="text-mata-text-muted hover:text-mata-text text-xs p-0.5">✕</button>
+        <button onClick={() => { setOpen(false); }} className="text-mata-text-muted hover:text-mata-text text-xs p-0.5">✕</button>
       </div>
 
-      {/* Quick suggestions */}
-      {!result && !loading && suggestions && suggestions.length > 0 && (
-        <div className="px-3 py-2 flex flex-wrap gap-1 border-b border-mata-border/50">
+      {/* Quick suggestions (only when no messages yet) */}
+      {allMessages.length === 0 && !loading && suggestions && suggestions.length > 0 && (
+        <div className="px-3 py-2 flex flex-wrap gap-1 border-t border-mata-border/50">
           {suggestions.map((s, i) => (
             <button
               key={i}
@@ -159,74 +226,16 @@ export default function AskAgent({
 
       {/* Loading */}
       {loading && (
-        <div className="p-3 animate-pulse space-y-2">
-          <div className="flex items-center gap-2">
-            <div className="h-4 w-4 rounded-full bg-mata-surface" />
-            <div className="h-2 w-16 rounded bg-mata-surface" />
-          </div>
-          <div className="h-3 w-full rounded bg-mata-surface" />
-          <div className="h-3 w-2/3 rounded bg-mata-surface" />
+        <div className="px-3 py-2 flex items-center gap-2 border-t border-mata-border/50">
+          <div className="h-4 w-4 rounded-full bg-mata-surface animate-pulse" />
+          <div className="h-2 w-24 rounded bg-mata-surface animate-pulse" />
         </div>
       )}
 
       {/* Error */}
       {error && (
-        <div className="p-3">
+        <div className="px-3 py-2 border-t border-mata-border/50">
           <p className="text-[10px] text-mata-red">{error}</p>
-          <p className="text-[9px] text-mata-text-muted mt-1 italic">System data remains available.</p>
-        </div>
-      )}
-
-      {/* Result */}
-      {result && !loading && (
-        <div className="p-3 space-y-2">
-          {/* Routing info */}
-          <div className="flex items-center gap-2">
-            <AgentAvatar agentName={result.routedAgent} size="xs" />
-            <span className="text-[10px] font-black text-mata-text">{result.routedAgent}</span>
-            <span className="text-[8px] text-mata-text-muted italic">· {result.routingReason}</span>
-          </div>
-
-          {/* Stance + confidence */}
-          {result.structured && result.status === 'success' && (
-            <div className="flex items-center gap-2">
-              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${stanceColor[result.structured.stance] ?? 'bg-mata-surface'}`}>
-                {result.structured.stance.toUpperCase()}
-              </span>
-              <span className="text-[8px] text-mata-text-muted">{Math.round(result.structured.confidence * 100)}% confidence</span>
-            </div>
-          )}
-
-          {/* Answer text */}
-          <p className="text-[11px] text-mata-text-secondary leading-relaxed">{result.answer}</p>
-
-          {/* Drivers/Risks */}
-          {result.structured && result.status === 'success' && (result.structured.topDrivers.length > 0 || result.structured.risks.length > 0) && (
-            <div className="grid grid-cols-2 gap-2">
-              {result.structured.topDrivers.length > 0 && (
-                <div>
-                  <div className="text-[8px] font-black text-mata-green uppercase mb-0.5">Drivers</div>
-                  {result.structured.topDrivers.map((d, i) => (
-                    <div key={i} className="text-[9px] text-mata-text-secondary">+ {d}</div>
-                  ))}
-                </div>
-              )}
-              {result.structured.risks.length > 0 && (
-                <div>
-                  <div className="text-[8px] font-black text-mata-red uppercase mb-0.5">Risks</div>
-                  {result.structured.risks.map((r, i) => (
-                    <div key={i} className="text-[9px] text-mata-text-secondary">– {r}</div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Provenance */}
-          <div className="pt-1.5 border-t border-mata-border/30 flex items-center justify-between text-[8px] text-mata-text-muted">
-            <span>Routed → {result.routedAgent} · {result.tokensUsed} tokens · {(result.latencyMs / 1000).toFixed(1)}s</span>
-            <span>{result.status === 'success' ? '✓' : result.status === 'fallback' ? '~' : '✕'}</span>
-          </div>
         </div>
       )}
     </div>

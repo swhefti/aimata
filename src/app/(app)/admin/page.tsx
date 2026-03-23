@@ -6,7 +6,7 @@ import { CONFIG_MANIFEST } from '@/lib/config/manifest';
 import ConfigEditor from '@/components/admin/ConfigEditor';
 
 /* ─── Types ─── */
-type Tab = 'overview' | 'runs' | 'agents' | 'evaluation' | 'config' | 'llm-log';
+type Tab = 'overview' | 'runs' | 'agents' | 'evaluation' | 'config' | 'activity';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'overview', label: 'Overview' },
@@ -14,7 +14,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'agents', label: 'Agents' },
   { key: 'evaluation', label: 'Evaluation' },
   { key: 'config', label: 'Config' },
-  { key: 'llm-log', label: 'LLM Log' },
+  { key: 'activity', label: 'Activity' },
 ];
 
 const STATUS_COLORS: Record<string, string> = {
@@ -186,12 +186,12 @@ function RunsTab() {
               <tr key={id} className="group">
                 <td colSpan={7} className="p-0">
                   <button onClick={() => handleExpand(id)} className="w-full text-left grid grid-cols-7 px-4 py-3 hover:bg-mata-surface/30 transition-colors cursor-pointer">
-                    <span className="text-mata-text font-medium">{String(run.type ?? '')}</span>
-                    <span className="text-mata-text-secondary truncate">{String(run.subject ?? run.ticker ?? '')}</span>
+                    <span className="text-mata-text font-medium">{String(run.graph_type ?? run.type ?? '')}</span>
+                    <span className="text-mata-text-secondary truncate">{run.subject_id ? `${String(run.subject_type ?? '')}:${String(run.subject_id)}` : String(run.subject_type ?? '')}</span>
                     <span><StatusBadge status={String(run.status ?? 'pending')} /></span>
-                    <span className="text-mata-text-muted">{Number(run.tokens ?? 0).toLocaleString()}</span>
-                    <span className="text-mata-text-muted">{Number(run.latency ?? run.latency_ms ?? 0)}ms</span>
-                    <span className="text-mata-text-muted">{String(run.nodes ?? run.node_count ?? 0)}</span>
+                    <span className="text-mata-text-muted">{Number(run.total_tokens ?? 0).toLocaleString()}</span>
+                    <span className="text-mata-text-muted">{Number(run.total_latency_ms ?? 0)}ms</span>
+                    <span className="text-mata-text-muted">{String(run.nodes_completed ?? 0)}/{String(run.node_count ?? 0)}</span>
                     <span className="text-mata-text-muted">{run.created_at ? new Date(String(run.created_at)).toLocaleString() : ''}</span>
                   </button>
                   {isExpanded && (
@@ -207,13 +207,13 @@ function RunsTab() {
                           <tbody className="divide-y divide-mata-border/30">
                             {nodeRuns[id].map((nr: Record<string, unknown>, i: number) => (
                               <tr key={i}>
-                                <td className="py-2 text-mata-text font-medium">{String(nr.node_name ?? nr.name ?? '')}</td>
-                                <td className={`py-2 font-semibold ${AGENT_COLORS[String(nr.agent_name ?? nr.agent ?? '')] ?? 'text-mata-text-secondary'}`}>{String(nr.agent_name ?? nr.agent ?? '')}</td>
+                                <td className="py-2 text-mata-text font-medium">{String(nr.node_name ?? '')}</td>
+                                <td className={`py-2 font-semibold ${AGENT_COLORS[String(nr.agent_name ?? '')] ?? 'text-mata-text-secondary'}`}>{String(nr.agent_name ?? '')}</td>
                                 <td className="py-2"><StatusBadge status={String(nr.status ?? 'pending')} /></td>
-                                <td className="py-2 text-mata-text-muted max-w-[200px] truncate">{String(nr.output_text ?? nr.output ?? '').slice(0, 100)}</td>
-                                <td className="py-2 text-mata-text-muted">{Number(nr.tokens_used ?? nr.tokens ?? 0).toLocaleString()}</td>
-                                <td className="py-2 text-mata-text-muted">{Number(nr.latency ?? nr.latency_ms ?? 0)}ms</td>
-                                <td className="py-2 text-red-400">{String(nr.error ?? '')}</td>
+                                <td className="py-2 text-mata-text-muted max-w-[200px] truncate">{String(nr.output_text ?? '').slice(0, 100)}</td>
+                                <td className="py-2 text-mata-text-muted">{Number(nr.tokens_used ?? 0).toLocaleString()}</td>
+                                <td className="py-2 text-mata-text-muted">{Number(nr.latency_ms ?? 0)}ms</td>
+                                <td className="py-2 text-red-400">{String(nr.error_message ?? '')}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -290,40 +290,40 @@ function EvaluationTab() {
     <div className="space-y-6">
       {summary && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {summary.byScoreBucket && (
+          {summary.byScoreBucket?.length > 0 && (
             <div className="rounded-2xl border border-mata-border bg-mata-card p-4">
               <p className="text-xs font-bold uppercase tracking-wider text-mata-text-muted mb-2">Avg Return by Score</p>
               <div className="space-y-1 text-sm">
-                {Object.entries(summary.byScoreBucket as Record<string, number>).map(([bucket, ret]) => (
-                  <div key={bucket} className="flex justify-between">
-                    <span className="text-mata-text-secondary">{bucket}</span>
-                    <span className={Number(ret) >= 0 ? 'text-green-400' : 'text-red-400'}>{Number(ret).toFixed(2)}%</span>
+                {(summary.byScoreBucket as { label: string; count: number; avgReturn: number }[]).map((b) => (
+                  <div key={b.label} className="flex justify-between">
+                    <span className="text-mata-text-secondary">{b.label} ({b.count})</span>
+                    <span className={b.avgReturn >= 0 ? 'text-green-400' : 'text-red-400'}>{b.avgReturn.toFixed(2)}%</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
-          {summary.byLabel && (
+          {summary.byLabel?.length > 0 && (
             <div className="rounded-2xl border border-mata-border bg-mata-card p-4">
               <p className="text-xs font-bold uppercase tracking-wider text-mata-text-muted mb-2">Avg Return by Label</p>
               <div className="space-y-1 text-sm">
-                {Object.entries(summary.byLabel as Record<string, number>).map(([label, ret]) => (
-                  <div key={label} className="flex justify-between">
-                    <span className="text-mata-text-secondary">{label}</span>
-                    <span className={Number(ret) >= 0 ? 'text-green-400' : 'text-red-400'}>{Number(ret).toFixed(2)}%</span>
+                {(summary.byLabel as { label: string; count: number; avgReturn: number }[]).map((b) => (
+                  <div key={b.label} className="flex justify-between">
+                    <span className="text-mata-text-secondary">{b.label} ({b.count})</span>
+                    <span className={b.avgReturn >= 0 ? 'text-green-400' : 'text-red-400'}>{b.avgReturn.toFixed(2)}%</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
-          {summary.byRisk && (
+          {summary.byRisk?.length > 0 && (
             <div className="rounded-2xl border border-mata-border bg-mata-card p-4">
               <p className="text-xs font-bold uppercase tracking-wider text-mata-text-muted mb-2">Avg Return by Risk</p>
               <div className="space-y-1 text-sm">
-                {Object.entries(summary.byRisk as Record<string, number>).map(([risk, ret]) => (
-                  <div key={risk} className="flex justify-between">
-                    <span className="text-mata-text-secondary">{risk}</span>
-                    <span className={Number(ret) >= 0 ? 'text-green-400' : 'text-red-400'}>{Number(ret).toFixed(2)}%</span>
+                {(summary.byRisk as { label: string; count: number; avgReturn: number }[]).map((b) => (
+                  <div key={b.label} className="flex justify-between">
+                    <span className="text-mata-text-secondary">{b.label} ({b.count})</span>
+                    <span className={b.avgReturn >= 0 ? 'text-green-400' : 'text-red-400'}>{b.avgReturn.toFixed(2)}%</span>
                   </div>
                 ))}
               </div>
@@ -427,56 +427,77 @@ function ConfigTab() {
   return <ConfigEditor configs={configs} manifest={CONFIG_MANIFEST} onSave={handleSave} />;
 }
 
-function LlmLogTab() {
+function ActivityTab() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, loading, error, reload } = useFetch<any[]>('/api/admin/llm-log');
+  const { data, loading, error, reload } = useFetch<any[]>('/api/admin/activity');
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
   if (loading) return (
     <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-xl" />)}</div>
   );
   if (error) return <ErrorBox message={error} onRetry={reload} />;
-  if (!data?.length) return <EmptyState message="No LLM log entries yet." />;
+  if (!data?.length) return <EmptyState message="No activity entries yet." />;
 
   return (
     <div className="overflow-x-auto rounded-2xl border border-mata-border bg-mata-card">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-mata-border bg-mata-surface/50 text-left text-xs font-bold uppercase tracking-wider text-mata-text-muted">
-            <th className="px-4 py-3">Prompt Key</th><th className="px-4 py-3">Model</th><th className="px-4 py-3">Tokens</th>
-            <th className="px-4 py-3">Duration</th><th className="px-4 py-3">Created</th>
+            <th className="px-4 py-3">Time</th><th className="px-4 py-3">Source</th><th className="px-4 py-3">Graph/Prompt</th>
+            <th className="px-4 py-3">Agent/Node</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Tokens</th>
+            <th className="px-4 py-3">Latency</th><th className="px-4 py-3">Output Preview</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-mata-border/50">
-          {data.map((entry: Record<string, unknown>, i: number) => (
-            <tr key={i} className="group">
-              <td colSpan={5} className="p-0">
-                <button onClick={() => setExpandedIdx(expandedIdx === i ? null : i)} className="w-full text-left grid grid-cols-5 px-4 py-3 hover:bg-mata-surface/30 transition-colors cursor-pointer">
-                  <span className="text-mata-text font-medium">{String(entry.prompt_key ?? entry.promptKey ?? '')}</span>
-                  <span className="text-mata-text-secondary">{String(entry.model ?? '')}</span>
-                  <span className="text-mata-text-muted">{Number(entry.tokens ?? entry.total_tokens ?? 0).toLocaleString()}</span>
-                  <span className="text-mata-text-muted">{Number(entry.duration ?? entry.duration_ms ?? 0)}ms</span>
-                  <span className="text-mata-text-muted">{entry.created_at ? new Date(String(entry.created_at)).toLocaleString() : ''}</span>
-                </button>
-                {expandedIdx === i && (
-                  <div className="bg-mata-surface/20 px-6 py-4 border-t border-mata-border/30 space-y-3">
-                    {entry.input_data != null && (
-                      <div>
-                        <p className="text-xs font-bold uppercase tracking-wider text-mata-text-muted mb-1">Input Data</p>
-                        <pre className="text-xs text-mata-text-secondary bg-mata-surface rounded-lg p-3 overflow-x-auto max-h-48 overflow-y-auto">{typeof entry.input_data === 'string' ? entry.input_data : JSON.stringify(entry.input_data, null, 2)}</pre>
+          {data.map((entry: Record<string, unknown>, i: number) => {
+            const isGraph = entry.source === 'graph_node';
+            const sourceBadgeCls = isGraph
+              ? 'bg-blue-500/15 text-blue-400 border-blue-500/20'
+              : 'bg-orange-500/15 text-orange-400 border-orange-500/20';
+            const sourceLabel = isGraph ? 'graph' : 'direct';
+            const graphOrPrompt = isGraph ? String(entry.graph_type ?? '') : String(entry.prompt_key ?? '');
+            const agentOrNode = String(entry.agent_name ?? entry.node_name ?? '');
+            const preview = String(entry.output_preview ?? '').slice(0, 80);
+
+            return (
+              <tr key={String(entry.id ?? i)} className="group">
+                <td colSpan={8} className="p-0">
+                  <button onClick={() => setExpandedIdx(expandedIdx === i ? null : i)} className="w-full text-left grid grid-cols-8 px-4 py-3 hover:bg-mata-surface/30 transition-colors cursor-pointer">
+                    <span className="text-mata-text-muted">{entry.timestamp ? new Date(String(entry.timestamp)).toLocaleString() : ''}</span>
+                    <span><span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${sourceBadgeCls}`}>{sourceLabel}</span></span>
+                    <span className="text-mata-text font-medium truncate">{graphOrPrompt}</span>
+                    <span className={`font-semibold ${AGENT_COLORS[agentOrNode] ?? 'text-mata-text-secondary'}`}>{agentOrNode}</span>
+                    <span><StatusBadge status={String(entry.status ?? 'pending')} /></span>
+                    <span className="text-mata-text-muted">{Number(entry.tokens_used ?? 0).toLocaleString()}</span>
+                    <span className="text-mata-text-muted">{Number(entry.latency_ms ?? 0)}ms</span>
+                    <span className="text-mata-text-muted truncate">{preview}</span>
+                  </button>
+                  {expandedIdx === i && (
+                    <div className="bg-mata-surface/20 px-6 py-4 border-t border-mata-border/30 space-y-3">
+                      {Boolean(entry.output_preview) && (
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wider text-mata-text-muted mb-1">Output Preview</p>
+                          <pre className="text-xs text-mata-text-secondary bg-mata-surface rounded-lg p-3 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap">{String(entry.output_preview)}</pre>
+                        </div>
+                      )}
+                      {Boolean(entry.error_message) && (
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wider text-red-400 mb-1">Error</p>
+                          <pre className="text-xs text-red-400 bg-red-500/5 rounded-lg p-3 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap">{String(entry.error_message)}</pre>
+                        </div>
+                      )}
+                      <div className="flex gap-4 text-xs text-mata-text-muted">
+                        {Boolean(entry.model) && <span>Model: <span className="text-mata-text-secondary">{String(entry.model)}</span></span>}
+                        {Boolean(entry.graph_type) && <span>Graph: <span className="text-mata-text-secondary">{String(entry.graph_type)}</span></span>}
+                        {Boolean(entry.node_name) && <span>Node: <span className="text-mata-text-secondary">{String(entry.node_name)}</span></span>}
+                        {Boolean(entry.prompt_key) && <span>Prompt: <span className="text-mata-text-secondary">{String(entry.prompt_key)}</span></span>}
                       </div>
-                    )}
-                    {(entry.output != null || entry.output_text != null) && (
-                      <div>
-                        <p className="text-xs font-bold uppercase tracking-wider text-mata-text-muted mb-1">Output</p>
-                        <pre className="text-xs text-mata-text-secondary bg-mata-surface rounded-lg p-3 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap">{String(entry.output ?? entry.output_text ?? '')}</pre>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </td>
-            </tr>
-          ))}
+                    </div>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -518,7 +539,7 @@ export default function AdminPage() {
       {activeTab === 'agents' && <AgentsTab />}
       {activeTab === 'evaluation' && <EvaluationTab />}
       {activeTab === 'config' && <ConfigTab />}
-      {activeTab === 'llm-log' && <LlmLogTab />}
+      {activeTab === 'activity' && <ActivityTab />}
     </div>
   );
 }
