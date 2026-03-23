@@ -5,7 +5,7 @@ import * as trader from '@/server/domains/trader';
 export async function GET() {
   try {
     const user = await requireUser();
-    const analytics = await trader.computeAndSnapshotAnalytics(user.id);
+    const analytics = await trader.computeAnalytics(user.id);
     return NextResponse.json(analytics);
   } catch (error) {
     if (error instanceof AuthError) {

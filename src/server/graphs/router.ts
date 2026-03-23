@@ -124,9 +124,26 @@ Context preview: ${state.contextSummary.substring(0, 300)}`
 
   // Fallback routing based on subject type
   const fallbackAgent = inferAgentFromContext(state.subjectType, state.question);
+  const fallbackReason = `Fallback: routed by subject type (${state.subjectType})`;
+
+  // Persist fallback route-node trace for debugging
+  try {
+    await db.schema('trader').from('node_runs').insert({
+      graph_run_id: state.graphRunId,
+      node_name: 'route',
+      agent_name: fallbackAgent,
+      status: 'fallback',
+      input_summary: state.question.substring(0, 200),
+      output_text: fallbackReason,
+      structured_output: { agent: fallbackAgent, reason: fallbackReason, fallback: true },
+      tokens_used: 0,
+      latency_ms: Date.now() - startTime,
+    });
+  } catch { /* non-critical */ }
+
   return {
     routedAgent: fallbackAgent,
-    routingReason: `Fallback: routed by subject type (${state.subjectType})`,
+    routingReason: fallbackReason,
   };
 }
 
@@ -363,11 +380,17 @@ export async function askWithRouting(
 
     const totalLatency = Date.now() - startTime;
 
+    // Sum tokens from ALL persisted node_runs (route + specialist)
+    const { data: nodeTokens } = await db.schema('trader').from('node_runs')
+      .select('tokens_used')
+      .eq('graph_run_id', graphRunId);
+    const totalTokens = (nodeTokens ?? []).reduce((sum: number, n: { tokens_used: number | null }) => sum + (n.tokens_used ?? 0), 0);
+
     // Update graph run
     await db.schema('trader').from('graph_runs').update({
       status: result.answerStatus === 'failed' ? 'completed_with_errors' : 'completed',
       nodes_completed: 2,
-      total_tokens: result.tokensUsed,
+      total_tokens: totalTokens,
       total_latency_ms: totalLatency,
       completed_at: new Date().toISOString(),
     }).eq('id', graphRunId);

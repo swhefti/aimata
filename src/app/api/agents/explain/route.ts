@@ -90,7 +90,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'No active basket with positions' }, { status: 404 });
       }
 
-      const analytics = await trader.computeAndSnapshotAnalytics(user.id);
+      const analytics = await trader.computeAnalytics(user.id);
 
       const ctx: BasketContext = {
         positionCount: positions.length,

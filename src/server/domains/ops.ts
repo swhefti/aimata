@@ -246,6 +246,8 @@ export async function getOpportunityOutcomes(): Promise<EvaluationResult> {
   }
 
   const tickers = scored.map((s: { ticker: string }) => s.ticker);
+
+  // Current prices (latest quote per ticker)
   const { data: quotes } = await db.from('market_quotes')
     .select('ticker, last_price')
     .in('ticker', tickers)
@@ -256,21 +258,45 @@ export async function getOpportunityOutcomes(): Promise<EvaluationResult> {
     if (!quoteMap.has(q.ticker as string)) quoteMap.set(q.ticker as string, q.last_price as number);
   }
 
+  // Entry prices: find the close on or nearest before scored_at per ticker.
+  // Fetch enough history to cover all scoring dates.
   const { data: histPrices } = await db.from('price_history')
     .select('ticker, date, close')
     .in('ticker', tickers)
     .order('date', { ascending: false })
-    .limit(tickers.length * 5);
+    .limit(tickers.length * 60);
 
-  const entryMap = new Map<string, number>();
+  // Build a map of ticker → [{date, close}] sorted newest first
+  const pricesByTicker = new Map<string, { date: string; close: number }[]>();
   for (const p of histPrices ?? []) {
-    if (!entryMap.has(p.ticker as string)) entryMap.set(p.ticker as string, p.close as number);
+    const t = p.ticker as string;
+    const arr = pricesByTicker.get(t) ?? [];
+    arr.push({ date: p.date as string, close: p.close as number });
+    pricesByTicker.set(t, arr);
   }
 
-  // Build rows with frontend-expected field names
+  /**
+   * Find the closing price on or just before a target date.
+   * Uses the closest available date <= targetDate.
+   */
+  function findPriceAtDate(ticker: string, targetDate: string): number | null {
+    const prices = pricesByTicker.get(ticker);
+    if (!prices || prices.length === 0) return null;
+    const target = targetDate.substring(0, 10); // YYYY-MM-DD
+    // prices are sorted newest first; find first price <= target
+    for (const p of prices) {
+      if (p.date <= target) return p.close;
+    }
+    // If all prices are after the target, use the oldest available
+    return prices[prices.length - 1].close;
+  }
+
+  // Build rows using the actual scored_at timestamp for entry price
   const rows: OpportunityOutcome[] = scored.map((s: Record<string, unknown>) => {
     const ticker = s.ticker as string;
-    const priceAtScore = entryMap.get(ticker) ?? null;
+    const scoredAt = s.scored_at as string;
+    const scoredDate = scoredAt ? scoredAt.substring(0, 10) : '';
+    const priceAtScore = scoredDate ? findPriceAtDate(ticker, scoredDate) : null;
     const currentPrice = quoteMap.get(ticker) ?? null;
     const returnPct = priceAtScore && currentPrice ? ((currentPrice - priceAtScore) / priceAtScore) * 100 : null;
 

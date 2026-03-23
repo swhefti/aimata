@@ -64,7 +64,7 @@ ${positions.map((p: BasketPosition) =>
   ).join('\n')}`);
 
   // ─── Analytics ───
-  const analytics = await trader.computeAndSnapshotAnalytics(userId);
+  const analytics = await trader.computeAnalytics(userId);
   if (analytics) {
     sections.push(`## Basket Analytics
 Probability Score: ${analytics.probability_score}/100 (${analytics.basket_quality})

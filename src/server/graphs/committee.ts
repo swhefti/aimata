@@ -333,11 +333,15 @@ export async function runCommitteeSynthesis(
 
     const totalLatencyMs = Date.now() - startTime;
 
-    // Compute totals from specialist outputs
+    // Compute totals from ALL node_runs (specialists + synthesis)
     const specialistOutputs = [result.markOutput, result.niaOutput, result.paulOutput, result.rexOutput]
       .filter((o): o is SpecialistOutput => o !== null);
 
-    const totalTokens = specialistOutputs.reduce((sum, o) => sum + o.tokensUsed, 0);
+    // Sum tokens from persisted node_runs to include synthesis node
+    const { data: nodeTokens } = await db.schema('trader').from('node_runs')
+      .select('tokens_used')
+      .eq('graph_run_id', graphRunId);
+    const totalTokens = (nodeTokens ?? []).reduce((sum: number, n: { tokens_used: number | null }) => sum + (n.tokens_used ?? 0), 0);
 
     // Update graph run record
     await db.schema('trader').from('graph_runs').update({

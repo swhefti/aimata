@@ -276,16 +276,15 @@ async function reweightAndReturn(basketId: string): Promise<BasketPosition[]> {
 // ─── Basket Analytics ───
 
 /**
- * Compute basket analytics and store a snapshot.
+ * Compute basket analytics WITHOUT persisting a snapshot.
+ * Use for read paths (API GETs, context building) to avoid snapshot spam.
  */
-export async function computeAndSnapshotAnalytics(userId: string): Promise<BasketAnalytics | null> {
+export async function computeAnalytics(userId: string): Promise<BasketAnalytics | null> {
   const db = getAdminClient();
-  const { basket, positions } = await getUserBasket(userId);
-  if (!basket || positions.length === 0) return null;
+  const { positions } = await getUserBasket(userId);
+  if (positions.length === 0) return null;
 
   const config = await loadConfig(db);
-
-  // Fetch price history for held tickers
   const tickers = positions.map((p) => p.ticker);
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -297,13 +296,22 @@ export async function computeAndSnapshotAnalytics(userId: string): Promise<Baske
     .in('ticker', tickers)
     .gte('date', sinceDate);
 
-  const analytics = computeBasketAnalytics(
-    positions,
-    (priceData ?? []) as PriceHistory[],
-    config
-  );
+  return computeBasketAnalytics(positions, (priceData ?? []) as PriceHistory[], config);
+}
 
-  // Store snapshot
+/**
+ * Compute basket analytics AND persist a snapshot.
+ * Use only for deliberate persistence moments: basket mutations,
+ * recommendation runs, or scheduled snapshots.
+ */
+export async function computeAndSnapshotAnalytics(userId: string): Promise<BasketAnalytics | null> {
+  const db = getAdminClient();
+  const { basket } = await getUserBasket(userId);
+  if (!basket) return null;
+
+  const analytics = await computeAnalytics(userId);
+  if (!analytics) return null;
+
   await db.schema('trader').from('basket_risk_snapshots').insert({
     basket_id: basket.id,
     user_id: userId,
