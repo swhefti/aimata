@@ -30,36 +30,37 @@ export default function AgentBriefCard({ agent, title, lines }: AgentBriefCardPr
   const hasMore = lines.length > 2;
 
   return (
-    <div className="relative">
-      {/* Agent face — sits at top-left, overlapping the bubble */}
-      <div className="absolute -top-2 -left-1 z-10">
-        <AgentAvatar agentName={agent} size="sm" />
+    <div className="relative pt-1">
+      {/* Agent face + name row */}
+      <div className="flex items-center gap-1.5 mb-1 ml-0.5">
+        <AgentAvatar agentName={agent} size="md" />
+        <span className="text-[11px] font-black text-mata-text">{agent}</span>
       </div>
 
       {/* Speech bubble */}
-      <div
-        className="rounded-xl border border-mata-border bg-mata-card overflow-hidden ml-3 mt-2 cursor-pointer hover:border-mata-orange/20 transition-colors"
-        onClick={() => hasMore && setExpanded(!expanded)}
-      >
-        {/* Speech bubble pointer (triangle pointing to the avatar) */}
-        <div className="absolute top-4 left-1.5 w-2 h-2 bg-mata-card border-l border-t border-mata-border rotate-[-45deg] z-[5]" />
+      <div className="relative ml-3">
+        {/* Triangle pointer pointing up-left toward the avatar */}
+        <div className="absolute -top-1 left-3 w-2.5 h-2.5 bg-mata-card border-l border-t border-mata-border rotate-45 z-[5]" />
 
-        <div className="px-3 pt-2 pb-2">
-          {/* Title */}
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[8px] font-black text-mata-text-muted uppercase tracking-wider">{title}</span>
+        <div
+          className="relative z-[4] rounded-xl border border-mata-border bg-mata-card overflow-hidden cursor-pointer hover:border-mata-orange/20 transition-colors"
+          onClick={() => hasMore && setExpanded(!expanded)}
+        >
+          <div className="px-3 pt-2.5 pb-2">
+            {/* Content */}
+            <div className="space-y-0.5">
+              {(expanded ? lines : previewLines).map((line, i) => (
+                <p key={i} className="text-[10px] text-mata-text-secondary leading-snug">
+                  {formatMarkdown(line.text)}
+                </p>
+              ))}
+            </div>
+
             {hasMore && (
-              <span className="text-[8px] text-mata-text-muted">{expanded ? '▾' : `+${lines.length - 2}`}</span>
+              <button className="text-[8px] font-bold text-mata-orange hover:text-mata-orange-dark transition-colors mt-1">
+                {expanded ? 'Show less' : `+${lines.length - 2} more`}
+              </button>
             )}
-          </div>
-
-          {/* Content */}
-          <div className="space-y-0.5">
-            {(expanded ? lines : previewLines).map((line, i) => (
-              <p key={i} className="text-[10px] text-mata-text-secondary leading-snug">
-                {formatMarkdown(line.text)}
-              </p>
-            ))}
           </div>
         </div>
       </div>
