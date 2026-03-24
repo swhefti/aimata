@@ -14,8 +14,8 @@ interface AgentAvatarProps {
 const sizeMap = {
   xs: { px: 20, cls: 'w-5 h-5' },
   sm: { px: 28, cls: 'w-7 h-7' },
-  md: { px: 36, cls: 'w-9 h-9' },
-  lg: { px: 48, cls: 'w-12 h-12' },
+  md: { px: 45, cls: 'w-[45px] h-[45px]' },
+  lg: { px: 60, cls: 'w-[60px] h-[60px]' },
 };
 
 const agentImages: Record<string, string> = {

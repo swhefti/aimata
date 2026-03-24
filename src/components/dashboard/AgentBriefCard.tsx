@@ -33,11 +33,11 @@ export default function AgentBriefCard({ agent, title, lines }: AgentBriefCardPr
 
   return (
     <>
-      <div className="relative pt-1">
-        {/* Agent face + name — clickable to open modal */}
+      <div className="relative">
+        {/* Agent face + name — overlaps the speech bubble, clickable */}
         <button
           onClick={() => setShowModal(true)}
-          className="flex items-center gap-1.5 mb-1 ml-0.5 hover:opacity-80 transition-opacity"
+          className="relative z-10 flex items-center gap-1.5 ml-1 mb-[-12px] hover:opacity-80 transition-opacity"
           title={`Talk to ${agent}`}
         >
           <AgentAvatar agentName={agent} size="md" />
@@ -45,14 +45,15 @@ export default function AgentBriefCard({ agent, title, lines }: AgentBriefCardPr
         </button>
 
         {/* Speech bubble */}
-        <div className="relative ml-3">
-          <div className="absolute -top-1 left-3 w-2.5 h-2.5 bg-mata-card border-l border-t border-mata-border rotate-45 z-[5]" />
+        <div className="relative">
+          {/* Triangle pointer pointing up toward the avatar */}
+          <div className="absolute top-0 left-5 w-2.5 h-2.5 bg-mata-card border-l border-t border-mata-border rotate-45 z-[5]" />
 
           <div
             className="relative z-[4] rounded-xl border border-mata-border bg-mata-card overflow-hidden cursor-pointer hover:border-mata-orange/20 transition-colors"
             onClick={() => hasMore ? setExpanded(!expanded) : setShowModal(true)}
           >
-            <div className="px-3 pt-2.5 pb-2">
+            <div className="px-3 pt-4 pb-2">
               <div className="space-y-0.5">
                 {(expanded ? lines : previewLines).map((line, i) => (
                   <p key={i} className="text-[10px] text-mata-text-secondary leading-snug">
