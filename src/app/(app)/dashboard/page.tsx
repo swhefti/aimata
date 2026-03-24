@@ -327,15 +327,19 @@ export default function DashboardPage() {
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <div>
           <h1 className="text-xl font-black text-mata-text tracking-tight">Dashboard</h1>
-          <p className="text-[11px] text-mata-text-muted">Your trading command center</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <AskAgent
+            subjectType="basket"
+            placeholder="Ask Mark, Nia, or Rex..."
+            suggestions={['What looks strongest right now?', 'Is my basket balanced?', 'Should I trim anything?']}
+          />
           {lastScanned && (
             <span className="text-[9px] text-mata-text-muted">
-              Scanned {lastScanned.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+              {lastScanned.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
             </span>
           )}
           <button onClick={handleRunScanner} disabled={scannerRunning}
@@ -349,20 +353,18 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Agent row — one card per agent, compact */}
+      {/* Agent row — flush with grid below */}
       <AgentRow positions={positions} analytics={analytics} opportunities={filteredOpportunities} signals={signals} />
 
-      {/* Ask the team — centered */}
-      <div className="mb-4 max-w-md mx-auto">
-        <AskAgent
-          subjectType="basket"
-          placeholder="Ask Mark, Nia, or Rex..."
-          suggestions={['What looks strongest right now?', 'Is my basket balanced?', 'Should I trim anything?']}
-        />
+      {/* Section titles */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 mb-1">
+        <h3 className="text-[10px] font-black text-mata-text-muted uppercase tracking-wider px-1">Scanned Market</h3>
+        <h3 className="text-[10px] font-black text-mata-text-muted uppercase tracking-wider px-1">Your Basket</h3>
+        <h3 className="text-[10px] font-black text-mata-text-muted uppercase tracking-wider px-1">Latest News</h3>
       </div>
 
       {/* 3 equal columns */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
         {/* LEFT: Scanner */}
         <div ref={scannerColRef}>
           {loadingFeed ? <FeedSkeleton /> : filteredOpportunities.length === 0 && opportunities.length === 0 ? (
@@ -469,28 +471,6 @@ function ScannerFeed({
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-base">⚡</span>
-        <div>
-          <h2 className="text-xs font-black text-mata-text tracking-tight">Mark&apos;s Scanner</h2>
-          <p className="text-[9px] text-mata-text-muted">{opportunities.length} found · click to flip · drag to basket</p>
-        </div>
-      </div>
-
-      {/* Filter tabs */}
-      <div className="flex gap-1 mb-3">
-        {(['All', 'Hot Now', 'Swing', 'Run'] as const).map((tab) => {
-          const count = tab === 'All' ? opportunities.length : counts[tab];
-          return (
-            <button key={tab} onClick={() => { setFilter(tab); setVisibleCount(INITIAL_COUNT); }}
-              className={`rounded-lg px-2 py-1 text-[9px] font-bold transition-all ${filter === tab ? 'bg-mata-orange text-white' : 'bg-mata-surface text-mata-text-muted hover:bg-mata-border'}`}>
-              {tab} {count > 0 && `(${count})`}
-            </button>
-          );
-        })}
-      </div>
-
       {/* Square card grid */}
       {visible.length > 0 ? (
         <div className="grid grid-cols-3 gap-2">
@@ -838,7 +818,7 @@ function AgentRow({
   const niaSection = brief.sections.find(s => s.agent === 'Nia');
 
   return (
-    <div className="grid grid-cols-1 gap-2 mb-4 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-2 mb-1 lg:grid-cols-3">
       {markSection && (
         <AgentBriefCard agent="Mark" title={markSection.title} lines={markSection.lines.map(t => ({ text: t }))} />
       )}

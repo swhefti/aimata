@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import AgentAvatar from '@/components/ui/AgentAvatar';
 
 interface NewsItem {
   id: string;
@@ -40,15 +39,6 @@ export default function NewsFeed() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-2">
-        <AgentAvatar agentName="Nia" size="sm" />
-        <div>
-          <h2 className="text-xs font-black text-mata-text tracking-tight">Latest News</h2>
-          <p className="text-[9px] text-mata-text-muted">Nia&apos;s news feed</p>
-        </div>
-      </div>
-
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
