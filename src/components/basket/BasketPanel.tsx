@@ -55,61 +55,80 @@ export default function BasketPanel({
       {/* Orange accent top bar */}
       <div className="h-1 rounded-t-2xl bg-gradient-to-r from-mata-orange to-mata-orange-light" />
 
-      {/* Header — compact: title + P&L + probability */}
-      <div className="px-4 pt-3 pb-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <AgentAvatar agentName="Rex" size="sm" />
-            <div>
-              <h2 className="text-sm font-black text-mata-text tracking-tight">Your Basket</h2>
-              <p className="text-[9px] text-mata-text-muted">
-                {positions.length} position{positions.length !== 1 ? 's' : ''}
-                {totalCost > 0 && ` · $${totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
-              </p>
-            </div>
-          </div>
-          {positions.length > 0 && (
-            <div className="flex items-center gap-3">
-              {/* Return */}
-              <div className="text-right">
-                <div className="text-sm font-black leading-tight">
-                  <AnimatedNumber value={totalPnlPct} suffix="%" decimals={1} colorize />
-                </div>
-                <div className="text-[8px] text-mata-text-muted">{winners}W / {losers}L</div>
-              </div>
-              {/* 3-month probability */}
-              {analytics && (
-                <div className={`flex flex-col items-center rounded-lg px-2 py-1 ${
-                  analytics.probability_score >= 60 ? 'bg-mata-green/10' : analytics.probability_score >= 40 ? 'bg-mata-yellow/10' : 'bg-mata-red/10'
-                }`}>
-                  <div className={`text-lg font-black leading-tight ${
-                    analytics.probability_score >= 60 ? 'text-mata-green' : analytics.probability_score >= 40 ? 'text-mata-yellow' : 'text-mata-red'
-                  }`}>
-                    {analytics.probability_score}
-                  </div>
-                  <div className="text-[7px] font-semibold text-mata-text-muted">3m prob</div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ─── Donut + Collapsible Intelligence ─── */}
+      {/* ─── Portfolio overview: Donut with value + Probability + Invested ─── */}
       {positions.length > 0 && (
-        <div className="mx-3 mb-2">
-          {/* Donut chart */}
-          <div className="flex justify-center py-2">
+        <div className="px-3 pt-3 pb-2">
+          <div className="flex items-start justify-between gap-3">
+            {/* Donut with current value inside */}
             <DonutChart
               segments={positions.map((p, i) => ({
                 label: p.ticker,
                 value: p.manual_weight ?? p.target_weight,
                 color: ['#ff6b2b', '#3b82f6', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899'][i % 8],
               }))}
-              size={100}
-              strokeWidth={16}
-            />
+              size={110}
+              strokeWidth={14}
+            >
+              <div className="text-center">
+                <div className="text-xs font-black text-mata-text leading-tight">
+                  ${totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </div>
+                <div className="text-[8px] font-bold leading-tight">
+                  <AnimatedNumber value={totalPnlPct} suffix="%" decimals={1} colorize />
+                </div>
+              </div>
+            </DonutChart>
+
+            {/* 3-month probability gauge */}
+            {analytics && (() => {
+              const score = analytics.probability_score;
+              const color = score >= 60 ? '#22c55e' : score >= 40 ? '#f59e0b' : '#ef4444';
+              const pct = score / 100;
+              const gaugeSize = 56;
+              const gaugeStroke = 5;
+              const gaugeR = (gaugeSize - gaugeStroke) / 2;
+              const gaugeC = Math.PI * gaugeR; // semicircle
+              return (
+                <div className="flex flex-col items-center">
+                  <svg width={gaugeSize} height={gaugeSize / 2 + 4} viewBox={`0 0 ${gaugeSize} ${gaugeSize / 2 + 4}`}>
+                    {/* Background arc */}
+                    <path
+                      d={`M ${gaugeStroke / 2} ${gaugeSize / 2} A ${gaugeR} ${gaugeR} 0 0 1 ${gaugeSize - gaugeStroke / 2} ${gaugeSize / 2}`}
+                      fill="none" stroke="#e8e6e1" strokeWidth={gaugeStroke} strokeLinecap="round"
+                    />
+                    {/* Filled arc */}
+                    <path
+                      d={`M ${gaugeStroke / 2} ${gaugeSize / 2} A ${gaugeR} ${gaugeR} 0 0 1 ${gaugeSize - gaugeStroke / 2} ${gaugeSize / 2}`}
+                      fill="none" stroke={color} strokeWidth={gaugeStroke} strokeLinecap="round"
+                      strokeDasharray={`${pct * gaugeC} ${gaugeC}`}
+                      className="transition-all duration-700"
+                    />
+                  </svg>
+                  <div className="text-base font-black leading-none -mt-1" style={{ color }}>{score}</div>
+                  <div className="text-[7px] font-semibold text-mata-text-muted">3m outlook</div>
+                  <div className="text-[8px] text-mata-text-muted mt-1">
+                    Invested: ${totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </div>
+                  <div className="text-[7px] text-mata-text-muted">{winners}W / {losers}L</div>
+                </div>
+              );
+            })()}
           </div>
+        </div>
+      )}
+
+      {positions.length === 0 && (
+        <div className="px-4 pt-3 pb-1">
+          <div className="flex items-center gap-2">
+            <AgentAvatar agentName="Rex" size="sm" />
+            <h2 className="text-sm font-black text-mata-text tracking-tight">Your Basket</h2>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Collapsible Intelligence ─── */}
+      {positions.length > 0 && (
+        <div className="mx-3 mb-2">
 
           {/* Collapsible basket intelligence */}
           <button

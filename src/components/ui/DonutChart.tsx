@@ -1,12 +1,15 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 interface DonutChartProps {
   segments: { label: string; value: number; color: string }[];
   size?: number;
   strokeWidth?: number;
+  children?: ReactNode;
 }
 
-export default function DonutChart({ segments, size = 120, strokeWidth = 20 }: DonutChartProps) {
+export default function DonutChart({ segments, size = 120, strokeWidth = 20, children }: DonutChartProps) {
   const total = segments.reduce((s, seg) => s + seg.value, 0);
   if (total === 0) return null;
 
@@ -18,30 +21,38 @@ export default function DonutChart({ segments, size = 120, strokeWidth = 20 }: D
 
   return (
     <div className="flex items-center gap-3">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        {segments.map((seg, i) => {
-          const pct = seg.value / total;
-          const dashLength = pct * circumference;
-          const dashOffset = -offset;
-          offset += dashLength;
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          {segments.map((seg, i) => {
+            const pct = seg.value / total;
+            const dashLength = pct * circumference;
+            const dashOffset = -offset;
+            offset += dashLength;
 
-          return (
-            <circle
-              key={i}
-              cx={center}
-              cy={center}
-              r={radius}
-              fill="none"
-              stroke={seg.color}
-              strokeWidth={strokeWidth}
-              strokeDasharray={`${dashLength} ${circumference - dashLength}`}
-              strokeDashoffset={dashOffset}
-              transform={`rotate(-90 ${center} ${center})`}
-              className="transition-all duration-500"
-            />
-          );
-        })}
-      </svg>
+            return (
+              <circle
+                key={i}
+                cx={center}
+                cy={center}
+                r={radius}
+                fill="none"
+                stroke={seg.color}
+                strokeWidth={strokeWidth}
+                strokeDasharray={`${dashLength} ${circumference - dashLength}`}
+                strokeDashoffset={dashOffset}
+                transform={`rotate(-90 ${center} ${center})`}
+                className="transition-all duration-500"
+              />
+            );
+          })}
+        </svg>
+        {/* Center content */}
+        {children && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            {children}
+          </div>
+        )}
+      </div>
 
       {/* Legend */}
       <div className="space-y-0.5">

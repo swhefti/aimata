@@ -16,7 +16,6 @@ import type { OpportunityScore, BasketPosition, BasketAnalytics } from '@/types'
 import Sparkline from '@/components/ui/Sparkline';
 import BasketPanel from '@/components/basket/BasketPanel';
 import DailyBrief from '@/components/dashboard/DailyBrief';
-import DashboardSummary from '@/components/dashboard/DashboardSummary';
 import PositionDetail from '@/components/basket/PositionDetail';
 import AskAgent from '@/components/agents/AskAgent';
 import { computePositionActions, type PositionSignal } from '@/lib/scoring/actions';
@@ -347,9 +346,6 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
-
-      {/* Status summary strip */}
-      <DashboardSummary positions={positions} analytics={analytics} opportunities={filteredOpportunities} signals={signals} />
 
       {/* 3 equal columns */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
