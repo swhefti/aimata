@@ -168,3 +168,32 @@ export async function enrichWithQuotesAndSparklines<T extends { ticker: string }
     };
   });
 }
+
+// ─── News Feed ───
+
+export interface NewsItem {
+  id: string;
+  ticker: string;
+  headline: string;
+  summary: string;
+  source: string;
+  published_at: string;
+  url: string;
+}
+
+export async function getLatestNews(limit: number = 20, tickers?: string[]): Promise<NewsItem[]> {
+  const db = getAdminClient();
+  let query = db
+    .from('news_data')
+    .select('id, ticker, headline, summary, source, published_at, url')
+    .order('published_at', { ascending: false })
+    .limit(limit);
+
+  if (tickers && tickers.length > 0) {
+    query = query.in('ticker', tickers);
+  }
+
+  const { data, error } = await query;
+  if (error) return [];
+  return (data ?? []) as NewsItem[];
+}

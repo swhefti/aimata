@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   DndContext,
   DragEndEvent,
@@ -15,10 +15,12 @@ import {
 import type { OpportunityScore, BasketPosition, BasketAnalytics } from '@/types';
 import Sparkline from '@/components/ui/Sparkline';
 import BasketPanel from '@/components/basket/BasketPanel';
-import DailyBrief from '@/components/dashboard/DailyBrief';
 import PositionDetail from '@/components/basket/PositionDetail';
 import AskAgent from '@/components/agents/AskAgent';
+import AgentBriefCard from '@/components/dashboard/AgentBriefCard';
+import NewsFeed from '@/components/dashboard/NewsFeed';
 import { computePositionActions, type PositionSignal } from '@/lib/scoring/actions';
+import { generateLocalBrief } from '@/lib/briefs/local';
 import { useToast } from '@/components/ui/Toast';
 
 type OpportunityWithPrice = OpportunityScore & {
@@ -347,6 +349,18 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Agent row — one card per agent, compact */}
+      <AgentRow positions={positions} analytics={analytics} opportunities={filteredOpportunities} signals={signals} />
+
+      {/* Ask the team — centered */}
+      <div className="mb-4 max-w-md mx-auto">
+        <AskAgent
+          subjectType="basket"
+          placeholder="Ask Mark, Nia, or Rex..."
+          suggestions={['What looks strongest right now?', 'Is my basket balanced?', 'Should I trim anything?']}
+        />
+      </div>
+
       {/* 3 equal columns */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* LEFT: Scanner */}
@@ -372,31 +386,15 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* CENTER: Basket + Team */}
-        {/* CENTER: Basket (with integrated intelligence) */}
+        {/* CENTER: Basket */}
         <div>
           <DroppableBasketArea positions={positions} onRemove={handleRemoveFromBasket} onWeightChange={handleWeightChange} onTrim={handleTrim} loadingBasket={loadingBasket} isDraggingFromFeed={dragSource === 'feed'} signals={signals} onPositionClick={setSelectedPosition} analytics={analytics} />
           {dragSource === 'basket' && <RemoveDropZone />}
         </div>
 
-        {/* RIGHT: Agent Zone */}
-        <div className="space-y-3">
-          {/* Ask the team */}
-          <AskAgent
-            subjectType="basket"
-            placeholder="Ask Mark, Nia, or Rex..."
-            suggestions={['What looks strongest right now?', 'Is my basket balanced?', 'Should I trim anything?']}
-          />
-          {/* Agent briefs */}
-          <DailyBrief
-            positions={positions}
-            analytics={analytics}
-            opportunities={opportunities}
-            signals={signals}
-            claudeBrief={brief}
-            onRefreshClaude={fetchBrief}
-            claudeLoading={loadingBrief}
-          />
+        {/* RIGHT: News Feed */}
+        <div>
+          <NewsFeed />
         </div>
       </div>
 
@@ -814,6 +812,41 @@ function DroppableBasketArea({
         </div>
       ) : (
         <BasketPanel positions={positions} onRemove={onRemove} onWeightChange={onWeightChange} onTrim={onTrim} isOver={isOver && isDraggingFromFeed} signals={signals} onPositionClick={onPositionClick} analytics={analytics} />
+      )}
+    </div>
+  );
+}
+
+// ─── Agent Row (top of dashboard) ───
+
+function AgentRow({
+  positions, analytics, opportunities, signals,
+}: {
+  positions: BasketPosition[];
+  analytics: BasketAnalytics | null;
+  opportunities: OpportunityWithPrice[];
+  signals: PositionSignal[];
+}) {
+  const brief = useMemo(
+    () => generateLocalBrief(positions, analytics, opportunities as OpportunityScore[], signals),
+    [positions, analytics, opportunities, signals]
+  );
+
+  // Map sections to agents: Mark, Rex, Nia
+  const markSection = brief.sections.find(s => s.agent === 'Mark');
+  const rexSection = brief.sections.find(s => s.agent === 'Rex');
+  const niaSection = brief.sections.find(s => s.agent === 'Nia');
+
+  return (
+    <div className="grid grid-cols-1 gap-2 mb-4 lg:grid-cols-3">
+      {markSection && (
+        <AgentBriefCard agent="Mark" title={markSection.title} lines={markSection.lines.map(t => ({ text: t }))} />
+      )}
+      {rexSection && (
+        <AgentBriefCard agent="Rex" title={rexSection.title} lines={rexSection.lines.map(t => ({ text: t }))} />
+      )}
+      {niaSection && (
+        <AgentBriefCard agent="Nia" title={niaSection.title} lines={niaSection.lines.map(t => ({ text: t }))} />
       )}
     </div>
   );
