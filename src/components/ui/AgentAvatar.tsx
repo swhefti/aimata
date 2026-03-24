@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { AGENTS } from '@/lib/agents';
 import type { AgentName } from '@/types';
 
@@ -11,51 +12,47 @@ interface AgentAvatarProps {
 }
 
 const sizeMap = {
-  xs: { container: 'w-6 h-6', text: 'text-[9px]', ring: 'ring-1' },
-  sm: { container: 'w-8 h-8', text: 'text-xs', ring: 'ring-2' },
-  md: { container: 'w-10 h-10', text: 'text-sm', ring: 'ring-2' },
-  lg: { container: 'w-14 h-14', text: 'text-lg', ring: 'ring-2' },
+  xs: { px: 20, cls: 'w-5 h-5' },
+  sm: { px: 28, cls: 'w-7 h-7' },
+  md: { px: 36, cls: 'w-9 h-9' },
+  lg: { px: 48, cls: 'w-12 h-12' },
 };
 
-// Each agent gets a distinct shape and style
-const agentStyles: Record<string, { shape: string; gradient: string; ringColor: string; initial: string }> = {
-  Mark: {
-    shape: 'rounded-lg rotate-3',
-    gradient: 'from-orange-400 to-red-500',
-    ringColor: 'ring-orange-400/30',
-    initial: 'M',
-  },
-  Paul: {
-    shape: 'rounded-full',
-    gradient: 'from-blue-400 to-indigo-500',
-    ringColor: 'ring-blue-400/30',
-    initial: 'P',
-  },
-  Nia: {
-    shape: 'rounded-xl -rotate-3',
-    gradient: 'from-violet-400 to-purple-500',
-    ringColor: 'ring-violet-400/30',
-    initial: 'N',
-  },
-  Rex: {
-    shape: 'rounded-lg rotate-0 [clip-path:polygon(50%_0%,100%_25%,100%_75%,50%_100%,0%_75%,0%_25%)]',
-    gradient: 'from-red-400 to-rose-600',
-    ringColor: 'ring-red-400/30',
-    initial: 'R',
-  },
+const agentImages: Record<string, string> = {
+  Mark: '/agents/mark.png',
+  Nia: '/agents/nia.png',
+  Rex: '/agents/rex.png',
+};
+
+const agentRingColor: Record<string, string> = {
+  Mark: 'ring-orange-400/40',
+  Nia: 'ring-violet-400/40',
+  Rex: 'ring-red-400/40',
+  Paul: 'ring-blue-400/40',
 };
 
 export default function AgentAvatar({ agentName, size = 'sm', showName, showRole }: AgentAvatarProps) {
   const agent = AGENTS[agentName];
   const s = sizeMap[size];
-  const style = agentStyles[agentName] ?? agentStyles.Mark;
+  const imgSrc = agentImages[agentName];
+  const ringColor = agentRingColor[agentName] ?? 'ring-mata-border';
 
   return (
-    <div className="flex items-center gap-2">
-      <div className={`${s.container} ${style.shape} ${style.ringColor} ${s.ring} bg-gradient-to-br ${style.gradient} flex items-center justify-center shadow-sm`}>
-        <span className={`${s.text} font-black text-white drop-shadow-sm`}>
-          {style.initial}
-        </span>
+    <div className="flex items-center gap-1.5">
+      <div className={`${s.cls} rounded-full overflow-hidden ring-2 ${ringColor} flex-shrink-0 bg-mata-surface`}>
+        {imgSrc ? (
+          <Image
+            src={imgSrc}
+            alt={agentName}
+            width={s.px}
+            height={s.px}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-400 to-indigo-500">
+            <span className="text-[9px] font-black text-white">{agentName[0]}</span>
+          </div>
+        )}
       </div>
       {(showName || showRole) && agent && (
         <div className="min-w-0">

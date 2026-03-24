@@ -30,34 +30,38 @@ export default function AgentBriefCard({ agent, title, lines }: AgentBriefCardPr
   const hasMore = lines.length > 2;
 
   return (
-    <div className="rounded-xl border border-mata-border bg-mata-card overflow-hidden">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-mata-surface/50 transition-colors text-left"
-      >
-        <AgentAvatar agentName={agent} size="xs" />
-        <div className="flex-1 min-w-0">
-          <span className="text-[9px] font-black text-mata-text uppercase tracking-wider">{title}</span>
-        </div>
-        {hasMore && (
-          <span className="text-[8px] text-mata-text-muted flex-shrink-0">{expanded ? '▾' : '▸'}</span>
-        )}
-      </button>
+    <div className="relative">
+      {/* Agent face — sits at top-left, overlapping the bubble */}
+      <div className="absolute -top-2 -left-1 z-10">
+        <AgentAvatar agentName={agent} size="sm" />
+      </div>
 
-      <div className="px-3 pb-2 space-y-0.5">
-        {(expanded ? lines : previewLines).map((line, i) => (
-          <p key={i} className="text-[10px] text-mata-text-secondary leading-snug">
-            {formatMarkdown(line.text)}
-          </p>
-        ))}
-        {!expanded && hasMore && (
-          <button
-            onClick={() => setExpanded(true)}
-            className="text-[8px] text-mata-orange font-bold hover:text-mata-orange-dark transition-colors"
-          >
-            +{lines.length - 2} more
-          </button>
-        )}
+      {/* Speech bubble */}
+      <div
+        className="rounded-xl border border-mata-border bg-mata-card overflow-hidden ml-3 mt-2 cursor-pointer hover:border-mata-orange/20 transition-colors"
+        onClick={() => hasMore && setExpanded(!expanded)}
+      >
+        {/* Speech bubble pointer (triangle pointing to the avatar) */}
+        <div className="absolute top-4 left-1.5 w-2 h-2 bg-mata-card border-l border-t border-mata-border rotate-[-45deg] z-[5]" />
+
+        <div className="px-3 pt-2 pb-2">
+          {/* Title */}
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[8px] font-black text-mata-text-muted uppercase tracking-wider">{title}</span>
+            {hasMore && (
+              <span className="text-[8px] text-mata-text-muted">{expanded ? '▾' : `+${lines.length - 2}`}</span>
+            )}
+          </div>
+
+          {/* Content */}
+          <div className="space-y-0.5">
+            {(expanded ? lines : previewLines).map((line, i) => (
+              <p key={i} className="text-[10px] text-mata-text-secondary leading-snug">
+                {formatMarkdown(line.text)}
+              </p>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
