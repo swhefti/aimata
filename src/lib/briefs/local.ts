@@ -23,15 +23,16 @@ export function generateLocalBrief(
   positions: BasketPosition[],
   analytics: BasketAnalytics | null,
   opportunities: OpportunityScore[],
-  signals: PositionSignal[]
+  signals: PositionSignal[],
+  previousScores?: Record<string, number>
 ): LocalBrief {
   const sections: BriefSection[] = [];
 
-  // ─── Mark: Market scan summary ───
-  sections.push(buildMarkSection(opportunities));
+  // ─── Mark: Market scan summary (with changes) ───
+  sections.push(buildMarkSection(opportunities, previousScores));
 
-  // ─── Rex: Basket health + Action items (absorbed Paul's role) ───
-  sections.push(buildRexSection(positions, signals, analytics));
+  // ─── Rex: Basket health + Action items (with changes) ───
+  sections.push(buildRexSection(positions, signals, analytics, previousScores));
 
   // ─── Nia: News & catalysts ───
   sections.push(buildNiaSection(opportunities, positions));
@@ -48,7 +49,7 @@ export function generateLocalBrief(
 
 // ─── Mark ───
 
-function buildMarkSection(opportunities: OpportunityScore[]): BriefSection {
+function buildMarkSection(opportunities: OpportunityScore[], previousScores?: Record<string, number>): BriefSection {
   const lines: string[] = [];
 
   const hotNow = opportunities.filter((o) => o.opportunity_label === 'Hot Now');
@@ -58,6 +59,23 @@ function buildMarkSection(opportunities: OpportunityScore[]): BriefSection {
   if (opportunities.length === 0) {
     lines.push('I haven\'t scanned yet. Hit that scanner button and I\'ll find you the best setups.');
     return { agent: 'Mark', title: 'Scanner Report', lines };
+  }
+
+  // What changed since last visit
+  if (previousScores && Object.keys(previousScores).length > 0) {
+    const newEntries = opportunities.filter(o => !(o.ticker in previousScores));
+    const improved = opportunities.filter(o => o.ticker in previousScores && o.opportunity_score > previousScores[o.ticker] + 5);
+    const declined = opportunities.filter(o => o.ticker in previousScores && o.opportunity_score < previousScores[o.ticker] - 5);
+
+    if (newEntries.length > 0) {
+      lines.push(`🆕 Since you were last here: **${newEntries.slice(0, 3).map(o => o.ticker).join(', ')}** ${newEntries.length === 1 ? 'is' : 'are'} new in the feed.`);
+    }
+    if (improved.length > 0) {
+      lines.push(`📈 Scores improved on **${improved.slice(0, 3).map(o => `${o.ticker} (+${o.opportunity_score - previousScores[o.ticker]})`).join(', ')}**.`);
+    }
+    if (declined.length > 0) {
+      lines.push(`📉 Weakened: **${declined.slice(0, 2).map(o => `${o.ticker} (${o.opportunity_score - previousScores[o.ticker]})`).join(', ')}**.`);
+    }
   }
 
   lines.push(`I just scanned **${opportunities.length} assets** — found ${hotNow.length} Hot Now, ${swings.length} Swing, and ${runs.length} Run setups.`);
@@ -117,12 +135,25 @@ function buildNiaSection(opportunities: OpportunityScore[], positions: BasketPos
 
 // ─── Rex ───
 
-function buildRexSection(positions: BasketPosition[], signals: PositionSignal[], analytics: BasketAnalytics | null): BriefSection {
+function buildRexSection(positions: BasketPosition[], signals: PositionSignal[], analytics: BasketAnalytics | null, previousScores?: Record<string, number>): BriefSection {
   const lines: string[] = [];
 
   if (positions.length === 0) {
     lines.push('Your basket is empty. Drag some setups in and I\'ll keep you on track.');
     return { agent: 'Rex', title: 'Basket & Actions', lines };
+  }
+
+  // What changed in the basket since last visit
+  if (previousScores && Object.keys(previousScores).length > 0) {
+    const weakened = positions.filter(p => p.ticker in previousScores && p.opportunity_score < previousScores[p.ticker] - 5);
+    const strengthened = positions.filter(p => p.ticker in previousScores && p.opportunity_score > previousScores[p.ticker] + 5);
+
+    if (weakened.length > 0) {
+      lines.push(`⚠️ Since last time, **${weakened.map(p => p.ticker).join(', ')}** ${weakened.length === 1 ? 'has' : 'have'} weakened in your basket. Keep an eye on ${weakened.length === 1 ? 'it' : 'them'}.`);
+    }
+    if (strengthened.length > 0) {
+      lines.push(`💪 Good news — **${strengthened.map(p => p.ticker).join(', ')}** got stronger since you were last here.`);
+    }
   }
 
   const totalPnl = positions.reduce((s, p) => s + p.pnl, 0);

@@ -28,8 +28,8 @@ export default function AgentBriefCard({ agent, title, lines }: AgentBriefCardPr
   const [expanded, setExpanded] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
-  const previewLines = lines.slice(0, 2);
-  const hasMore = lines.length > 2;
+  const previewLines = lines.slice(0, 5);
+  const hasMore = lines.length > 5;
 
   return (
     <>
@@ -54,17 +54,17 @@ export default function AgentBriefCard({ agent, title, lines }: AgentBriefCardPr
             onClick={() => hasMore ? setExpanded(!expanded) : setShowModal(true)}
           >
             <div className="px-3 pt-4 pb-2">
-              <div className="space-y-0.5">
+              <div className="space-y-1">
                 {(expanded ? lines : previewLines).map((line, i) => (
-                  <p key={i} className="text-[10px] text-mata-text-secondary leading-snug">
+                  <p key={i} className="text-[11px] text-mata-text-secondary leading-snug">
                     {formatMarkdown(line.text)}
                   </p>
                 ))}
               </div>
 
               {hasMore && (
-                <button className="text-[8px] font-bold text-mata-orange hover:text-mata-orange-dark transition-colors mt-1">
-                  {expanded ? 'Show less' : `+${lines.length - 2} more`}
+                <button className="text-[9px] font-bold text-mata-orange hover:text-mata-orange-dark transition-colors mt-1">
+                  {expanded ? 'Show less' : `+${lines.length - 5} more`}
                 </button>
               )}
             </div>

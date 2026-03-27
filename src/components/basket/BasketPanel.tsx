@@ -123,6 +123,33 @@ export default function BasketPanel({
               );
             })()}
           </div>
+
+          {/* Portfolio sparkline — composited from position price histories */}
+          {priceHistories && Object.keys(priceHistories).length > 0 && (() => {
+            // Build a weighted portfolio line from individual position sparklines
+            const maxLen = Math.max(...Object.values(priceHistories).map(h => h.length));
+            if (maxLen < 2) return null;
+            const portfolioLine: number[] = [];
+            for (let i = 0; i < maxLen; i++) {
+              let weightedSum = 0;
+              let totalW = 0;
+              for (const pos of positions) {
+                const hist = priceHistories[pos.ticker];
+                if (!hist || hist.length < 2) continue;
+                const w = pos.manual_weight ?? pos.target_weight;
+                const idx = Math.round((i / (maxLen - 1)) * (hist.length - 1));
+                weightedSum += (hist[idx] / hist[0]) * w;
+                totalW += w;
+              }
+              if (totalW > 0) portfolioLine.push(weightedSum / totalW);
+            }
+            if (portfolioLine.length < 2) return null;
+            return (
+              <div className="mx-3 mt-1 rounded-lg bg-mata-surface/30 p-2">
+                <Sparkline data={portfolioLine} width={280} height={32} strokeWidth={1.5} fillOpacity={0.08} />
+              </div>
+            );
+          })()}
         </div>
       )}
 

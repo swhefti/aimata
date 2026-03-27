@@ -16,6 +16,7 @@ import type { OpportunityScore, BasketPosition, BasketAnalytics } from '@/types'
 import Sparkline from '@/components/ui/Sparkline';
 import BasketPanel from '@/components/basket/BasketPanel';
 import PositionDetail from '@/components/basket/PositionDetail';
+import OpportunityDrawer from '@/components/dashboard/OpportunityDrawer';
 import AskAgent from '@/components/agents/AskAgent';
 import AgentBriefCard from '@/components/dashboard/AgentBriefCard';
 import NewsFeed from '@/components/dashboard/NewsFeed';
@@ -166,6 +167,8 @@ export default function DashboardPage() {
   const [signals, setSignals] = useState<PositionSignal[]>([]);
   const [lastScanned, setLastScanned] = useState<Date | null>(null);
   const [selectedPosition, setSelectedPosition] = useState<string | null>(null);
+  const [selectedOpportunity, setSelectedOpportunity] = useState<string | null>(null);
+  const [positionSparklines, setPositionSparklines] = useState<Record<string, number[]>>({});
 
   const [pendingAdd, setPendingAdd] = useState<{
     ticker: string; assetName: string; price: number; opportunityData: OpportunityWithPrice;
@@ -221,6 +224,24 @@ export default function DashboardPage() {
   // Compute Rex's signals whenever positions change
   useEffect(() => {
     setSignals(computePositionActions(positions));
+  }, [positions]);
+
+  // Fetch sparkline data for basket positions
+  useEffect(() => {
+    if (positions.length === 0) return;
+    const tickers = positions.map(p => p.ticker);
+    fetch(`/api/opportunities`) // opportunities already have price_history
+      .then(r => r.json())
+      .then((data: OpportunityWithPrice[]) => {
+        const sparklines: Record<string, number[]> = {};
+        for (const item of data) {
+          if (tickers.includes(item.ticker) && item.price_history && item.price_history.length > 0) {
+            sparklines[item.ticker] = item.price_history;
+          }
+        }
+        setPositionSparklines(sparklines);
+      })
+      .catch(() => {});
   }, [positions]);
 
   // ─── Actions ───
@@ -384,13 +405,13 @@ export default function DashboardPage() {
               </button>
             </div>
           ) : (
-            <ScannerFeed opportunities={filteredOpportunities} onAdd={showQuantityModal} flippedTicker={flippedTicker} onFlip={setFlippedTicker} columnRef={scannerColRef} />
+            <ScannerFeed opportunities={filteredOpportunities} onAdd={showQuantityModal} onDetail={setSelectedOpportunity} flippedTicker={flippedTicker} onFlip={setFlippedTicker} columnRef={scannerColRef} />
           )}
         </div>
 
         {/* CENTER: Basket */}
         <div>
-          <DroppableBasketArea positions={positions} onRemove={handleRemoveFromBasket} onWeightChange={handleWeightChange} onTrim={handleTrim} loadingBasket={loadingBasket} isDraggingFromFeed={dragSource === 'feed'} signals={signals} onPositionClick={setSelectedPosition} analytics={analytics} />
+          <DroppableBasketArea positions={positions} onRemove={handleRemoveFromBasket} onWeightChange={handleWeightChange} onTrim={handleTrim} loadingBasket={loadingBasket} isDraggingFromFeed={dragSource === 'feed'} signals={signals} onPositionClick={setSelectedPosition} analytics={analytics} priceHistories={positionSparklines} />
           {dragSource === 'basket' && <RemoveDropZone />}
         </div>
 
@@ -409,12 +430,22 @@ export default function DashboardPage() {
           <PositionDetail
             position={pos}
             signal={sig}
+            priceHistory={positionSparklines[selectedPosition]}
             onClose={() => setSelectedPosition(null)}
             onRemove={(t) => { handleRemoveFromBasket(t); setSelectedPosition(null); }}
             onTrim={(t) => { handleTrim(t); setSelectedPosition(null); }}
           />
         );
       })()}
+
+      {/* Opportunity detail drawer */}
+      {selectedOpportunity && (
+        <OpportunityDrawer
+          ticker={selectedOpportunity}
+          onClose={() => setSelectedOpportunity(null)}
+          onAdd={showQuantityModal}
+        />
+      )}
 
       {/* Drag overlay */}
       <DragOverlay>
@@ -447,10 +478,11 @@ const INCREMENT = 6;
 const MAX_COUNT = 21;
 
 function ScannerFeed({
-  opportunities, onAdd, flippedTicker, onFlip, columnRef,
+  opportunities, onAdd, onDetail, flippedTicker, onFlip, columnRef,
 }: {
   opportunities: OpportunityWithPrice[];
   onAdd: (ticker: string) => void;
+  onDetail: (ticker: string) => void;
   flippedTicker: string | null;
   onFlip: (ticker: string | null) => void;
   columnRef: React.RefObject<HTMLDivElement | null>;
@@ -481,6 +513,7 @@ function ScannerFeed({
               isFlipped={flippedTicker === opp.ticker}
               onFlip={() => onFlip(flippedTicker === opp.ticker ? null : opp.ticker)}
               onAdd={onAdd}
+              onDetail={onDetail}
               columnRef={columnRef}
             />
           ))}
@@ -508,12 +541,14 @@ function FlippableCard({
   isFlipped,
   onFlip,
   onAdd,
+  onDetail,
   columnRef,
 }: {
   opportunity: OpportunityWithPrice;
   isFlipped: boolean;
   onFlip: () => void;
   onAdd: (ticker: string) => void;
+  onDetail: (ticker: string) => void;
   columnRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -749,13 +784,12 @@ function FlippableCard({
 
                   {/* Back footer */}
                   <div className="px-5 py-2.5 border-t border-mata-border flex items-center justify-between">
-                    <a
-                      href={`/opportunity/${o.ticker}`}
-                      onClick={(e) => e.stopPropagation()}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleClose(); onDetail(o.ticker); }}
                       className="text-[10px] font-bold text-mata-text-secondary hover:text-mata-orange transition-colors"
                     >
                       Full detail →
-                    </a>
+                    </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); onAdd(o.ticker); }}
                       className="rounded-lg bg-gradient-to-r from-mata-orange to-mata-orange-dark px-4 py-1.5 text-[10px] font-bold text-white hover:shadow-md hover:shadow-mata-orange/20 transition-all active:scale-[0.97]"
@@ -775,9 +809,9 @@ function FlippableCard({
 
 // ─── Droppable Basket Area ───
 function DroppableBasketArea({
-  positions, onRemove, onWeightChange, onTrim, loadingBasket, isDraggingFromFeed, signals, onPositionClick, analytics,
+  positions, onRemove, onWeightChange, onTrim, loadingBasket, isDraggingFromFeed, signals, onPositionClick, analytics, priceHistories,
 }: {
-  positions: BasketPosition[]; onRemove: (t: string) => void; onWeightChange: (t: string, w: number) => void; onTrim: (t: string) => void; loadingBasket: boolean; isDraggingFromFeed: boolean; signals: PositionSignal[]; onPositionClick?: (ticker: string) => void; analytics?: BasketAnalytics | null;
+  positions: BasketPosition[]; onRemove: (t: string) => void; onWeightChange: (t: string, w: number) => void; onTrim: (t: string) => void; loadingBasket: boolean; isDraggingFromFeed: boolean; signals: PositionSignal[]; onPositionClick?: (ticker: string) => void; analytics?: BasketAnalytics | null; priceHistories?: Record<string, number[]>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: 'basket-drop' });
   return (
@@ -791,7 +825,7 @@ function DroppableBasketArea({
           </div>
         </div>
       ) : (
-        <BasketPanel positions={positions} onRemove={onRemove} onWeightChange={onWeightChange} onTrim={onTrim} isOver={isOver && isDraggingFromFeed} signals={signals} onPositionClick={onPositionClick} analytics={analytics} />
+        <BasketPanel positions={positions} onRemove={onRemove} onWeightChange={onWeightChange} onTrim={onTrim} isOver={isOver && isDraggingFromFeed} signals={signals} onPositionClick={onPositionClick} analytics={analytics} priceHistories={priceHistories} />
       )}
     </div>
   );
@@ -807,9 +841,29 @@ function AgentRow({
   opportunities: OpportunityWithPrice[];
   signals: PositionSignal[];
 }) {
+  // Track previous scores for "what changed" feature
+  const previousScores = useMemo(() => {
+    if (typeof window === 'undefined') return undefined;
+    try {
+      const stored = localStorage.getItem('aimata_prev_scores');
+      return stored ? JSON.parse(stored) as Record<string, number> : undefined;
+    } catch { return undefined; }
+  }, []);
+
+  // Save current scores for next visit
+  useEffect(() => {
+    if (opportunities.length > 0) {
+      const scores: Record<string, number> = {};
+      opportunities.forEach(o => { scores[o.ticker] = o.opportunity_score; });
+      // Also include basket positions
+      positions.forEach(p => { scores[p.ticker] = p.opportunity_score; });
+      try { localStorage.setItem('aimata_prev_scores', JSON.stringify(scores)); } catch {}
+    }
+  }, [opportunities, positions]);
+
   const brief = useMemo(
-    () => generateLocalBrief(positions, analytics, opportunities as OpportunityScore[], signals),
-    [positions, analytics, opportunities, signals]
+    () => generateLocalBrief(positions, analytics, opportunities as OpportunityScore[], signals, previousScores),
+    [positions, analytics, opportunities, signals, previousScores]
   );
 
   // Map sections to agents: Mark, Rex, Nia
