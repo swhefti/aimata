@@ -47,7 +47,8 @@ function LoginForm() {
     if (err) {
       setError(err.message);
     } else {
-      router.push('/dashboard');
+      const onboarded = typeof window !== 'undefined' && localStorage.getItem('aimata_onboarded');
+      router.push(onboarded ? '/dashboard' : '/onboarding');
     }
   }
 
@@ -91,7 +92,8 @@ function LoginForm() {
     }
 
     setGuestLoading(false);
-    router.push('/dashboard');
+    const onboarded = typeof window !== 'undefined' && localStorage.getItem('aimata_onboarded');
+    router.push(onboarded ? '/dashboard' : '/onboarding');
   }
 
   return (
