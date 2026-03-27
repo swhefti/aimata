@@ -71,12 +71,22 @@ export async function runScanner(): Promise<ScannerResult> {
   // ── Step 1: Gather market data (Layer A) ──
   const assets = await getNonEtfAssets();
   const tickers = assets.map((a) => a.ticker);
-  const [priceHistory, quotesMap, fundamentals] = await Promise.all([
+
+  // Use allSettled so a single source failure doesn't crash the entire scan
+  const [priceResult, quotesResult, fundResult] = await Promise.allSettled([
     getPriceHistory(tickers, 60),
     getLatestQuotes(tickers),
     getFundamentals(tickers),
   ]);
+
+  const priceHistory = priceResult.status === 'fulfilled' ? priceResult.value : [];
+  const quotesMap = quotesResult.status === 'fulfilled' ? quotesResult.value : new Map();
+  const fundamentals = fundResult.status === 'fulfilled' ? fundResult.value : [];
   const quotes = Array.from(quotesMap.values());
+
+  if (priceResult.status === 'rejected') {
+    console.error('Scanner: price history fetch failed, scoring with empty history');
+  }
 
   // Build provenance metadata
   const latestPriceDate = priceHistory.length > 0

@@ -82,11 +82,13 @@ export async function getSparklineData(tickers: string[], points: number = 20): 
  */
 export async function getLatestQuotes(tickers?: string[]): Promise<Map<string, MarketQuote>> {
   const db = getAdminClient();
+  // Limit proportional to ticker count: at most 3 rows per ticker (to handle date duplicates)
+  const rowLimit = tickers && tickers.length > 0 ? Math.max(tickers.length * 3, 30) : 500;
   let query = db
     .from('market_quotes')
     .select('*')
     .order('date', { ascending: false })
-    .limit(500);
+    .limit(rowLimit);
 
   if (tickers && tickers.length > 0) {
     query = query.in('ticker', tickers);

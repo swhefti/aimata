@@ -106,7 +106,16 @@ export default function BasketPanel({
                   </svg>
                   <div className="text-base font-black leading-none -mt-1" style={{ color }}>{score}</div>
                   <div className="text-[7px] font-semibold text-mata-text-muted">3m outlook</div>
-                  <div className="text-[8px] text-mata-text-muted mt-1">
+                  {/* Quality badge — always visible with color */}
+                  <div className={`mt-1 text-[8px] font-black px-1.5 py-0.5 rounded-full ${
+                    analytics.basket_quality === 'Strong' ? 'bg-mata-green/15 text-mata-green'
+                    : analytics.basket_quality === 'Good' ? 'bg-mata-blue/15 text-mata-blue'
+                    : analytics.basket_quality === 'Fair' ? 'bg-mata-yellow/15 text-mata-yellow'
+                    : 'bg-mata-red/15 text-mata-red'
+                  }`}>
+                    {analytics.basket_quality}
+                  </div>
+                  <div className="text-[8px] text-mata-text-muted mt-0.5">
                     Invested: ${totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                   </div>
                   <div className="text-[7px] text-mata-text-muted">{winners}W / {losers}L</div>
@@ -142,8 +151,26 @@ export default function BasketPanel({
             <span>{showIntel ? '▾' : '▸'}</span>
           </button>
 
-          {showIntel && analytics && (
-            <div className="rounded-lg bg-mata-surface/50 border border-mata-border/50 px-3 py-2 mb-2 animate-[slideInUp_0.15s_ease-out]">
+          {showIntel && analytics && (() => {
+            // Signal accuracy: check current signals vs P&L direction
+            const signalResults = (signals ?? []).map(s => {
+              const pos = positions.find(p => p.ticker === s.ticker);
+              if (!pos) return null;
+              const correct =
+                (s.action === 'Hold' && pos.pnl_pct >= -5) ||
+                (s.action === 'Add' && pos.pnl_pct >= 0) ||
+                (s.action === 'Strong Buy' && pos.pnl_pct >= 0) ||
+                (s.action === 'Trim' && pos.pnl_pct > 10) ||
+                (s.action === 'Take Profit' && pos.pnl_pct > 15) ||
+                (s.action === 'Exit' && pos.pnl_pct < -8) ||
+                (s.action === 'Watch' && Math.abs(pos.pnl_pct) < 10);
+              return correct;
+            }).filter(r => r !== null);
+            const accuracy = signalResults.length > 0
+              ? Math.round((signalResults.filter(Boolean).length / signalResults.length) * 100)
+              : null;
+
+            return (<div className="rounded-lg bg-mata-surface/50 border border-mata-border/50 px-3 py-2 mb-2 animate-[slideInUp_0.15s_ease-out]">
               <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[9px]">
                 <div>
                   <span className="text-mata-text-muted">Upside:</span>{' '}
@@ -170,8 +197,17 @@ export default function BasketPanel({
                   <span className="font-bold text-mata-text">{analytics.largest_position_ticker} {analytics.largest_position_pct.toFixed(0)}%</span>
                 </div>
               </div>
-            </div>
-          )}
+              {accuracy !== null && (
+                <div className="mt-2 pt-2 border-t border-mata-border/30 flex items-center gap-2">
+                  <span className="text-[8px] text-mata-text-muted">Rex signal accuracy:</span>
+                  <span className={`text-[9px] font-black ${accuracy >= 70 ? 'text-mata-green' : accuracy >= 50 ? 'text-mata-yellow' : 'text-mata-red'}`}>
+                    {accuracy}%
+                  </span>
+                  <span className="text-[7px] text-mata-text-muted">({signalResults.length} signals)</span>
+                </div>
+              )}
+            </div>);
+          })()}
         </div>
       )}
 

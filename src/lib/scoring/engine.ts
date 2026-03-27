@@ -38,6 +38,12 @@ export function computeOpportunityScores(
     regime_fit: getConfigValue<number>(config, 'scoring.regime_fit_weight'),
   };
 
+  // Validate weights sum to ~1.0
+  const weightSum = Object.values(weights).reduce((s, w) => s + w, 0);
+  if (weightSum < 0.95 || weightSum > 1.05) {
+    console.warn(`Scoring weights sum to ${weightSum.toFixed(3)}, expected ~1.0. Results may be skewed.`);
+  }
+
   const scores: OpportunityScore[] = [];
   const now = new Date().toISOString();
 
@@ -94,7 +100,7 @@ export function computeOpportunityScores(
       opportunity_label: opportunityLabel,
       risk_label: riskLabel,
       setup_type: setupType,
-      explanation: buildExplanation(asset, opportunityScore, setupType, opportunityLabel, riskLabel, quote),
+      explanation: buildExplanation(asset, opportunityScore, setupType, opportunityLabel, riskLabel, quote, componentScores),
       agent_tag: 'Mark',
       scored_at: now,
       horizon_days: horizonDays,
@@ -248,8 +254,13 @@ function computeSentimentScore(sorted: PriceHistory[]): number {
 }
 
 /**
- * Volatility: inverse of realized volatility. Lower vol = higher score (risk adjusted).
- * Uses 20d close-to-close volatility.
+ * Volatility: risk-adjusted volatility score.
+ * Rewards controlled volatility (sweet spot), penalizes both extremes.
+ * Very low vol = boring (score 40-60). Moderate vol = opportunity (60-90).
+ * Very high vol = dangerous (20-40). Extreme vol = reckless (0-20).
+ *
+ * This avoids penalizing momentum setups that have healthy vol,
+ * while still flagging truly dangerous whipsaw assets.
  */
 function computeVolatilityScore(sorted: PriceHistory[]): number {
   const window = sorted.slice(0, Math.min(20, sorted.length));
@@ -269,19 +280,22 @@ function computeVolatilityScore(sorted: PriceHistory[]): number {
   const dailyVol = Math.sqrt(variance);
   const annualizedVol = dailyVol * Math.sqrt(252);
 
-  // Lower volatility = higher score
-  // <20% annual vol = 80-100
-  // 20-40% = 50-80
-  // 40-80% = 20-50
-  // >80% = 0-20
-  if (annualizedVol < 0.20) {
-    return clamp(80 + (0.20 - annualizedVol) * 100, 80, 100);
-  } else if (annualizedVol < 0.40) {
-    return 50 + ((0.40 - annualizedVol) / 0.20) * 30;
+  // Sweet spot model: moderate vol (20-50%) = best for short-term trading
+  // <15% = too boring (40-55)
+  // 15-30% = good controlled vol (70-90)
+  // 30-50% = acceptable, higher reward potential (50-70)
+  // 50-80% = risky (25-50)
+  // >80% = dangerous (0-25)
+  if (annualizedVol < 0.15) {
+    return clamp(40 + annualizedVol * 100, 40, 55);
+  } else if (annualizedVol < 0.30) {
+    return clamp(70 + ((annualizedVol - 0.15) / 0.15) * 20, 70, 90);
+  } else if (annualizedVol < 0.50) {
+    return clamp(70 - ((annualizedVol - 0.30) / 0.20) * 20, 50, 70);
   } else if (annualizedVol < 0.80) {
-    return 20 + ((0.80 - annualizedVol) / 0.40) * 30;
+    return clamp(50 - ((annualizedVol - 0.50) / 0.30) * 25, 25, 50);
   } else {
-    return clamp(20 - (annualizedVol - 0.80) * 25, 0, 20);
+    return clamp(25 - (annualizedVol - 0.80) * 50, 0, 25);
   }
 }
 
@@ -367,9 +381,11 @@ function deriveRiskLabel(sorted: PriceHistory[], volatilityScore: number): RiskL
     maxDrawdown = Math.max(maxDrawdown, drawdown);
   }
 
-  // Combine volatility score and drawdown for risk assessment
-  if (volatilityScore < 30 || maxDrawdown > 0.15) return 'High';
-  if (volatilityScore < 55 || maxDrawdown > 0.08) return 'Medium';
+  // Both high volatility AND significant drawdown = High risk
+  // Either one alone = Medium. Neither = Low.
+  if (volatilityScore < 30 && maxDrawdown > 0.10) return 'High';
+  if (maxDrawdown > 0.15) return 'High'; // severe drawdown alone is high risk
+  if (volatilityScore < 40 || maxDrawdown > 0.08) return 'Medium';
   return 'Low';
 }
 
@@ -408,10 +424,53 @@ function buildExplanation(
   setup: string,
   label: OpportunityLabel,
   risk: RiskLabel,
-  quote: MarketQuote | undefined
+  quote: MarketQuote | undefined,
+  components: ComponentScores
 ): string {
-  const priceInfo = quote ? ` at $${quote.last_price.toFixed(2)} (${quote.pct_change >= 0 ? '+' : ''}${quote.pct_change.toFixed(2)}%)` : '';
-  return `${asset.name}${priceInfo} scores ${score}/100 as a ${label} ${setup} setup with ${risk} risk.`;
+  const parts: string[] = [];
+
+  // Lead with price context
+  if (quote) {
+    const dir = quote.pct_change >= 0 ? 'up' : 'down';
+    parts.push(`${asset.name} is ${dir} ${Math.abs(quote.pct_change * 100).toFixed(1)}% at $${quote.last_price.toFixed(2)}.`);
+  }
+
+  // Explain the dominant driver
+  if (setup === 'Momentum' && components.momentum >= 70) {
+    parts.push(`Strong momentum across multiple timeframes — the move is accelerating.`);
+  } else if (setup === 'Breakout' && components.breakout >= 70) {
+    parts.push(`Trading near the 20-day high with breakout structure forming.`);
+  } else if (setup === 'Mean Reversion' && components.meanReversion >= 65) {
+    parts.push(`Well below the 20-day average — potential reversion opportunity.`);
+  } else if (setup === 'Catalyst' && components.catalyst >= 65) {
+    parts.push(`Backed by strong fundamentals — revenue growth and margins support the move.`);
+  } else if (setup === 'Trend' && components.regimeFit >= 65) {
+    parts.push(`Aligned with the broader market trend — regime fit is strong.`);
+  } else {
+    parts.push(`${setup} setup with balanced scoring across components.`);
+  }
+
+  // Add secondary signal if notable
+  const sorted = [
+    { name: 'momentum', val: components.momentum },
+    { name: 'breakout', val: components.breakout },
+    { name: 'catalyst', val: components.catalyst },
+    { name: 'sentiment', val: components.sentiment },
+  ].sort((a, b) => b.val - a.val);
+
+  if (sorted[1].val >= 65 && sorted[1].name !== setup.toLowerCase()) {
+    const secondary = sorted[1].name;
+    if (secondary === 'momentum') parts.push(`Momentum is also strong (${sorted[1].val}).`);
+    else if (secondary === 'breakout') parts.push(`Near breakout levels too (${sorted[1].val}).`);
+    else if (secondary === 'catalyst') parts.push(`Fundamentals add support (${sorted[1].val}).`);
+    else if (secondary === 'sentiment') parts.push(`Volume confirms market attention (${sorted[1].val}).`);
+  }
+
+  // Risk context
+  if (risk === 'Low') parts.push(`Risk is contained — controlled volatility.`);
+  else if (risk === 'High') parts.push(`Elevated risk — manage position size.`);
+
+  return parts.join(' ');
 }
 
 // ─── Helpers ───

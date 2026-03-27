@@ -87,6 +87,48 @@ export default function PositionDetail({
             </div>
           </div>
 
+          {/* Profit-Taking Guidance */}
+          {p.pnl_pct !== 0 && (
+            <div className="rounded-xl border border-mata-border bg-mata-surface/30 px-4 py-3">
+              <div className="text-[10px] font-black text-mata-text-muted uppercase tracking-wider mb-2">Profit-Taking Guide</div>
+              <div className="space-y-1.5">
+                {[
+                  { target: 10, label: 'First target', action: 'Consider trimming 25%' },
+                  { target: 20, label: 'Second target', action: 'Take 50% off the table' },
+                  { target: 35, label: 'Extended move', action: 'Lock in most gains, trail the rest' },
+                ].map((t) => {
+                  const reached = p.pnl_pct >= t.target;
+                  const approaching = p.pnl_pct >= t.target * 0.7 && !reached;
+                  return (
+                    <div key={t.target} className="flex items-center gap-2">
+                      <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                        reached ? 'bg-mata-green' : approaching ? 'bg-mata-yellow' : 'bg-mata-border'
+                      }`} />
+                      <div className="flex-1 flex items-center justify-between">
+                        <span className={`text-[9px] ${reached ? 'font-bold text-mata-green' : 'text-mata-text-muted'}`}>
+                          +{t.target}% — {t.label}
+                        </span>
+                        <span className={`text-[8px] ${reached ? 'font-bold text-mata-green' : approaching ? 'text-mata-yellow' : 'text-mata-text-muted'}`}>
+                          {reached ? '✓ Reached' : approaching ? 'Approaching' : t.action}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {p.pnl_pct < 0 && (
+                <div className="mt-2 pt-2 border-t border-mata-border/50">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-mata-red flex-shrink-0" />
+                    <span className="text-[9px] text-mata-red font-bold">
+                      Down {Math.abs(p.pnl_pct).toFixed(1)}% — {p.pnl_pct < -10 ? 'Consider stopping out' : 'Monitor closely'}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Rex Recommendation */}
           {signal && (
             <div className={`rounded-xl border px-4 py-3 ${

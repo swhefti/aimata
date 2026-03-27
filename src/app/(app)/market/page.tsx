@@ -30,6 +30,7 @@ interface MarketAsset {
   pct_change: number | null;
   price_history: number[];
   in_feed: boolean;
+  in_basket?: boolean;
 }
 
 type SortField =
@@ -150,6 +151,7 @@ export default function MarketPage() {
   const [assets, setAssets] = useState<MarketAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
+  const [basketTickers, setBasketTickers] = useState<Set<string>>(new Set());
 
   // Filters
   const [assetTypeFilter, setAssetTypeFilter] = useState<'all' | 'stock' | 'crypto'>('all');
@@ -162,13 +164,15 @@ export default function MarketPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   useEffect(() => {
-    fetch('/api/market')
-      .then((r) => r.json())
-      .then((data) => {
-        setAssets(data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    Promise.all([
+      fetch('/api/market').then(r => r.json()),
+      fetch('/api/basket').then(r => r.json()).catch(() => ({ positions: [] })),
+    ]).then(([marketData, basketData]) => {
+      setAssets(marketData);
+      const held = new Set<string>((basketData.positions ?? []).map((p: { ticker: string }) => p.ticker));
+      setBasketTickers(held);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
 
   const handleSort = useCallback(
@@ -310,7 +314,7 @@ export default function MarketPage() {
                 return (
                   <TableRow
                     key={asset.ticker}
-                    asset={asset}
+                    asset={{ ...asset, in_basket: basketTickers.has(asset.ticker) }}
                     isExpanded={isExpanded}
                     onToggle={() =>
                       setExpandedTicker(isExpanded ? null : asset.ticker)
@@ -367,6 +371,11 @@ function TableRow({
                 {asset.in_feed && (
                   <span className="rounded bg-mata-orange/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-mata-orange">
                     In Feed
+                  </span>
+                )}
+                {asset.in_basket && (
+                  <span className="rounded bg-mata-green/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-mata-green">
+                    Held
                   </span>
                 )}
               </div>
