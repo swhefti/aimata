@@ -47,7 +47,11 @@ async function callAgent(
   const maxTokens = getConfigValue<number>(config, 'model.max_tokens');
 
   const spec = AGENT_SPECS[agentName];
-  const systemPrompt = `${spec.systemPrompt}\n\n${spec.boundaryInstruction}\n\n${spec.outputInstruction}`;
+  // Read prompts from config (editable in admin), fall back to hardcoded defaults
+  const agentKey = agentName.toLowerCase();
+  const persona = getConfigValue<string>(config, `prompts.${agentKey}_system`) || spec.systemPrompt;
+  const boundary = getConfigValue<string>(config, `prompts.${agentKey}_boundary`) || spec.boundaryInstruction;
+  const systemPrompt = `${persona}\n\n${boundary}\n\n${spec.outputInstruction}`;
 
   let content = '';
   let structured: AgentStructuredOutput | null = null;

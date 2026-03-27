@@ -27,8 +27,8 @@ const STATUS_COLORS: Record<string, string> = {
 const AGENT_COLORS: Record<string, string> = {
   Mark: 'text-orange-400',
   Nia: 'text-purple-400',
-  Paul: 'text-blue-400',
   Rex: 'text-red-400',
+  committee: 'text-blue-400',
 };
 
 /* ─── Helpers ─── */
