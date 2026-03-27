@@ -32,6 +32,7 @@ interface ThreadData {
   id: string;
   routed_agent: string | null;
   routing_reason: string | null;
+  created_at: string;
   messages: ThreadMessage[];
 }
 
@@ -70,12 +71,14 @@ export default function AskAgent({
     }
   }, [open, loadThreads]);
 
-  // Scroll to bottom when new messages arrive
+  // Scroll to bottom when messages change (after DOM render)
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [threads]);
+    requestAnimationFrame(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    });
+  }, [threads, open]);
 
   async function handleAsk(q?: string) {
     const finalQ = q ?? question;
@@ -118,9 +121,12 @@ export default function AskAgent({
     urgent: 'text-mata-red bg-mata-red/10',
   };
 
-  // Flatten all messages from all threads for display
+  // Flatten messages in chronological order (oldest thread first, oldest message first)
+  const sortedThreads = [...threads].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  );
   const allMessages: (ThreadMessage & { threadAgent: string | null; threadReason: string | null })[] = [];
-  for (const t of threads) {
+  for (const t of sortedThreads) {
     for (const m of t.messages) {
       allMessages.push({ ...m, threadAgent: t.routed_agent, threadReason: t.routing_reason });
     }

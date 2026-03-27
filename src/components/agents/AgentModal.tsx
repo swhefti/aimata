@@ -63,24 +63,38 @@ export default function AgentModal({ agent, onClose }: AgentModalProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Load past threads for this agent's subject
+  // Load past threads that were routed to THIS agent
   const loadHistory = useCallback(async () => {
     try {
-      const subjectType = agent === 'Mark' ? 'market' : agent === 'Rex' ? 'basket' : 'market';
-      const res = await fetch(`/api/agents/threads?subjectType=${subjectType}`);
-      if (res.ok) {
-        const data = await res.json();
-        const threads: ThreadData[] = data.threads ?? [];
-        const hist: { role: string; content: string; agent?: string }[] = [];
-        for (const t of threads.slice(0, 3)) {
-          for (const m of t.messages) {
-            if (m.agent_name === agent || m.role === 'user') {
-              hist.push({ role: m.role, content: m.content, agent: m.agent_name ?? undefined });
+      // Load all thread types — we filter by routed_agent, not subject
+      const types = ['market', 'basket', 'ticker', 'recommendation'];
+      const allThreads: ThreadData[] = [];
+
+      for (const st of types) {
+        const res = await fetch(`/api/agents/threads?subjectType=${st}`);
+        if (res.ok) {
+          const data = await res.json();
+          const threads: ThreadData[] = data.threads ?? [];
+          // Only include threads that were routed to THIS agent
+          for (const t of threads) {
+            if (t.routed_agent === agent) {
+              allThreads.push(t);
             }
           }
         }
-        if (hist.length > 0) setMessages(hist);
       }
+
+      // Sort threads oldest-first, then flatten messages in chronological order
+      allThreads.sort((a, b) => new Date(a.messages[0]?.created_at ?? 0).getTime() - new Date(b.messages[0]?.created_at ?? 0).getTime());
+
+      const hist: { role: string; content: string; agent?: string }[] = [];
+      // Take only the last 5 threads to keep it manageable
+      for (const t of allThreads.slice(-5)) {
+        for (const m of t.messages) {
+          hist.push({ role: m.role, content: m.content, agent: m.agent_name ?? undefined });
+        }
+      }
+      if (hist.length > 0) setMessages(hist);
     } catch { /* silent */ }
     setThreadsLoaded(true);
   }, [agent]);
@@ -89,8 +103,11 @@ export default function AgentModal({ agent, onClose }: AgentModalProps) {
     loadHistory();
   }, [loadHistory]);
 
+  // Scroll to bottom when messages change (newest at bottom, like WhatsApp)
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    requestAnimationFrame(() => {
+      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    });
   }, [messages]);
 
   async function handleAsk(q?: string) {
